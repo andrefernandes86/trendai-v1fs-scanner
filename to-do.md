@@ -45,3 +45,5 @@
 Polling cannot detect files removed before observation. Paused uploads can appear stable. NFS supports v3 TCP AUTH_SYS, not NFSv4/Kerberos. Existing destination names are not retroactively renamed. Broad exclusions reduce malware coverage. Existing encrypted ZIP passwords belong to the uploader; the app preserves original bytes and adds no archive encryption. A managed password/archive conversion feature is optional and has not been requested as a concrete workflow.
 
 Watchdog fault tests cover abrupt child termination and a completely stopped/unresponsive child process. External notification code is unchanged.
+
+- [ ] Enable and validate files above the current 2 GiB runtime limit before accepting up to 100 GB: scanner capability, bounded-memory streaming, temporary disk, transfer timeouts, verification and retry/soak coverage. The sizing calculator already supports 100 GB planning.

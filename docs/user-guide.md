@@ -189,7 +189,9 @@ An old source-read failure can become **SUPERSEDED** only if a later successful 
 
 ## Sizing for 12,000 files per day
 
-Choose **Sizing calculator**, directly after Audit log. It starts with 12,000 files/day, an 8-hour processing window, 5 MiB average / 250 MiB maximum file size, a 4× arrival peak, one second per active file and 2× headroom. Under those assumptions, the application-host estimate is **4 vCPU, 4 GiB RAM, 110 GiB SSD and 4 simultaneous active files**. The disk estimate includes 90 days of 32 KiB/job history, WAL/growth allowance, temporary files and free-space reserve. It does not include remote destination storage or a separately hosted local scan engine.
+Choose **Sizing calculator**, directly after Audit log. It starts with 12,000 files/day, an 8-hour processing window, 5 MiB average / 100 GB maximum file size, a 4× arrival peak, one second per active file and 2× headroom. Under those assumptions, the application-host estimate is **4 vCPU, 4 GiB RAM, 1040 GiB SSD and 4 simultaneous active files**. The disk estimate includes 90 days of 32 KiB/job history, WAL/growth allowance, temporary files and free-space reserve. It does not include remote destination storage or a separately hosted local scan engine.
+
+**The 100 GB maximum is a planning input, not an enabled scanning capability.** GB means 1 billion bytes. The application currently accepts files up to 2 GiB. Larger files require implementation and validation before scanning can be supported. The maximum size reserves temporary disk; average size drives remote storage and network estimates. Replace the one-second example with measured download, scan, routing and verification time for representative files, especially large files.
 
 ![Sizing calculator with transparent planning inputs](images/sizing-calculator.png)
 
