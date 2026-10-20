@@ -130,7 +130,7 @@ func (a *App) insertJob(s Snapshot) (string, error) {
 	return id, nil
 }
 func (a *App) Jobs() ([]Job, error) {
-	rows, e := a.DB.Query("SELECT id,key,profile_id,profile_name,source_id,etag,version,size,state,verdict,digest,destination,error,attempts,created_at,updated_at FROM jobs ORDER BY created_at DESC LIMIT 500")
+	rows, e := a.DB.Query("SELECT j.id,j.key,j.profile_id,j.profile_name,j.source_id,j.etag,j.version,j.size,j.state,j.verdict,j.digest,j.destination,j.error,j.attempts,j.created_at,j.updated_at,COALESCE(d.payload,X''),COALESCE((SELECT n.id FROM jobs n WHERE n.source_id=j.source_id AND n.key=j.key AND n.profile_id=j.profile_id AND n.created_at>j.created_at AND n.state IN ('COMPLETED','QUARANTINED') ORDER BY n.created_at DESC LIMIT 1),'') FROM jobs j LEFT JOIN scan_details d ON d.job_id=j.id ORDER BY j.created_at DESC LIMIT 500")
 	if e != nil {
 		return nil, e
 	}
@@ -138,8 +138,17 @@ func (a *App) Jobs() ([]Job, error) {
 	out := []Job{}
 	for rows.Next() {
 		var j Job
-		if e = rows.Scan(&j.ID, &j.Key, &j.ProfileID, &j.ProfileName, &j.SourceID, &j.ETag, &j.Version, &j.Size, &j.State, &j.Verdict, &j.Digest, &j.Destination, &j.Error, &j.Attempts, &j.CreatedAt, &j.UpdatedAt); e != nil {
+		var details []byte
+		if e = rows.Scan(&j.ID, &j.Key, &j.ProfileID, &j.ProfileName, &j.SourceID, &j.ETag, &j.Version, &j.Size, &j.State, &j.Verdict, &j.Digest, &j.Destination, &j.Error, &j.Attempts, &j.CreatedAt, &j.UpdatedAt, &details, &j.NewerCompletedJobID); e != nil {
 			return nil, e
+		}
+		j.Detections = []Detection{}
+		if len(details) > 0 {
+			var d ScanDetails
+			if a.Unseal(details, &d) == nil {
+				j.Detections = d.Detections
+				j.ScanResponseRecorded = true
+			}
 		}
 		out = append(out, j)
 	}
@@ -248,6 +257,10 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 			} else {
 				fail("Scanner request failed. Check the API key, cloud region or local address, TLS, and connectivity.")
 			}
+			return
+		}
+		if err := a.recordScanDetails(id, raw, s.Scanner.APIKey); err != nil {
+			fail("Could not retain scanner details.")
 			return
 		}
 		verdict = core.Normalize(raw)

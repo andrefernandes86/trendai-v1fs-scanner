@@ -83,6 +83,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/scanner", a.scannerSave)
 	mux.HandleFunc("POST /api/scanner/test", a.scannerTest)
 	mux.HandleFunc("POST /api/scan", a.scan)
+	mux.HandleFunc("GET /api/jobs/{id}/scan-result", a.scanDetails)
 	mux.HandleFunc("GET /api/jobs/export.csv", a.exportJobsCSV)
 	mux.HandleFunc("GET /api/statistics", a.statistics)
 	mux.HandleFunc("GET /api/jobs", func(w http.ResponseWriter, r *http.Request) {

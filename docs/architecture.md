@@ -21,3 +21,5 @@ Retries reuse encrypted snapshots and verified verdicts; changing a profile affe
 ## Reporting
 
 Scan timestamps count distinct jobs with responses once. Older records without scan timestamps use last-update estimates. CSV streams all job records with verdicts, hashes, state, dates, attempts, errors and destination details, with spreadsheet formula protection. The UI activity list is limited to 500 records. No credential fields are exported.
+
+Scanner detection details are stored encrypted in `scan_details`, separate from the public job columns. Compact `foundMalwares` and verbose per-engine `malware` entries are supported. API keys are redacted before persistence. Historical responses are not reconstructed from filenames.

@@ -14,3 +14,7 @@ Enter comma-separated key=value tags. Common tags combine with clean/malicious t
 ## Refresh and export
 
 Overview, File activity and Audit log offer Off/5s/10s/30s/1m/5m auto-refresh. Settings persist in the browser. Other pages do not automatically refresh. Manual Refresh is available. CSV export covers all historical jobs, not only the current table or filter, and includes verdict, malicious/unknown status, hash presence and SHA-256, timestamps, state, source, destination, errors and attempts. JSON export on File activity/Audit log covers currently loaded records.
+
+## Detection details and older uploads
+
+New scans retain an encrypted scanner response. Record details show malware names, detection engines and affected files, with an authenticated Show scanner response action. CSV includes malware names and engines. Old records explicitly say names were not recorded; do not infer a malware name from a filename. Earlier uploads show when a newer version of the same source filename completed, keeping historical failures distinct from the current result.

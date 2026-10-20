@@ -2,7 +2,7 @@
 
 - [ ] Fix/improve SMB share enumeration interoperability and clear diagnostics when server RPC/IPC discovery is denied but direct share access works. Do not treat enumeration as required for a known share.
 - [ ] Add explicit re-scan/reprocess actions for files already in scan-failed storage, retaining history and immutable identities.
-- [ ] Persist encrypted raw scanner responses and expose redacted engine errors in record details.
+- [ ] Add a one-click historical detection-detail enrichment workflow for previously scanned files whose response was not retained.
 - [ ] Add a reboot-persistent host service and documented upgrade/rollback workflow.
 - [ ] Add browser-based visual regression and end-to-end UI tests across desktop/mobile layouts.
 - [ ] Add configurable upload quiet periods and ignore patterns for temporary/in-progress files.
