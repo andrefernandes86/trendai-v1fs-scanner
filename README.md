@@ -62,3 +62,7 @@ Run browser checks against an isolated instance with `PLAYWRIGHT_BROWSERS_PATH=/
 ## Container availability
 
 The image runs a separate Go watchdog around the API/scheduler/worker process. Stalls, exits and database liveness failures trigger child restart; Docker handles container exit and host boot via `restart: unless-stopped`. `/livez` checks component progress, while external storage/scanner failures use normal processing retries. Share inputs are atomically claimed before scanning, and claimed ownership survives restart. External notifications remain deferred; customer-scale testing is owned by the customer.
+
+### Performance validation
+
+See [performance testing](docs/performance-testing.md) for the real-source 1,000-file burst, 100-files-per-second batches, supplementary genuine ZIP tests, and sanitized latency/verification reports. Renamed-extension load samples retain their original bytes; they are not format conversions.

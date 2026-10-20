@@ -23,11 +23,14 @@ test('profile policy editor and responsive toolbar remain usable',async({page})=
  const create=page.getByRole('button',{name:'Create scan profile',exact:true});if(await create.isVisible()){await create.click()}else{await page.getByRole('button',{name:'New profile',exact:true}).click()}
  await expect(page.getByRole('heading',{name:'7. Exclusions & hold rules'})).toBeVisible();
  await page.getByRole('button',{name:'Add rule',exact:true}).click();
- await page.getByLabel('Rule ID', {exact:true}).fill('skip-images');
+ await page.getByLabel('Rule name (unique)', {exact:true}).fill('skip-images');
  await page.getByLabel('Path/filename pattern').fill('*.png');
  await page.getByRole('combobox',{name:'Action',exact:true}).selectOption('exclude');
  await expect(page.getByLabel('Scan failed destination')).toBeVisible();
  await expect(page.getByRole('heading',{name:'8. Failed-file recovery'})).toBeVisible();
+ await expect(page.getByLabel('Wait between recovery cycles (seconds)',{exact:true})).toBeDisabled();
+ await page.getByLabel('Automatically rescan isolated unknown files',{exact:true}).check();
+ await expect(page.getByLabel('Wait between recovery cycles (seconds)',{exact:true})).toBeEnabled();
  await page.screenshot({path:`../test-results/profile-${test.info().project.name}.png`,fullPage:true});
  const overflowing=await page.locator('[role="dialog"]').evaluate(el=>el.scrollWidth>el.clientWidth+2);expect(overflowing).toBe(false);
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
