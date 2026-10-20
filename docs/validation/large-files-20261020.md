@@ -18,7 +18,7 @@ Build source: commit 659cd62. Application image: 4f42b252a3b1. Current PoC host:
 
 The previously rejected VPLE.zip (3,727,527,135 bytes) acquired durable job 6c66700d1aa7380a1fdbbb9e7330ed56bd9df802086d78394d87a0b4aa5226a3 at 21:09:46 UTC. Its first attempt entered SCANNING (which includes source capture). Historical unaccounted inventory count dropped from 20 to zero through exact-version accounting and successful admission.
 
-During capture, container memory samples were approximately 36–74 MiB while the capture grew beyond 1.8 GiB; management and engine liveness remained healthy. These are point observations, not a peak-memory benchmark. Final SDK/routing outcome must be read from File activity and verified move evidence. A queued/capturing file must not be reported as successfully scanned.
+During capture, container memory samples were approximately 36–74 MiB while the capture grew beyond 1.8 GiB; management and engine liveness remained healthy. These are point observations, not a peak-memory benchmark. The full original capture (3,727,527,135 bytes) was observed at 21:13:47 UTC, about four minutes after admission. The SDK child was active afterward; at 21:15:05 UTC its RSS was approximately 118 MiB, engine RSS 33 MiB and API RSS 29 MiB. Docker aggregate memory also includes file cache and is not equivalent to process RSS. No final verdict had been recorded at that observation. Final SDK/routing outcome must be read from File activity and verified move evidence. A queued/capturing file must not be reported as successfully scanned.
 
 ## Validation boundaries
 
