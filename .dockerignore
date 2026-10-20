@@ -1,0 +1,8 @@
+.git
+work
+outputs
+node_modules
+**/node_modules
+**/.env
+**/data
+**/dist

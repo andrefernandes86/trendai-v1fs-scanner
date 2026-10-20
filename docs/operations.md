@@ -1,55 +1,35 @@
-# Deployment and operations
+# Host operation
 
-## Required access
+The active console is served by cmd/local on port 8095. Configuration is entered inside the console. No Azure gateway URL is needed.
 
-Supply a target Azure subscription, resource group and region, a registry image digest, a Vision One API key with the SDK scan permission, an Entra API application and a public SPA application. The host did not have Azure CLI or a logged-in subscription during implementation.
+## Initial setup
 
-The private Sites console URL is a separate frontend deployment. Configure its connection dialog with the deployed Azure API origin, tenant ID, SPA client ID, and `api://<api-client-id>/Gateway.Access` delegated scope. Add the exact Sites origin as an Entra SPA redirect URI and API CONSOLE_ORIGIN. Enable v2 access tokens for the API application. Register Viewer/Admin user app roles and EventIngestor for the authorized Event Grid service principal; grant assignments explicitly. Do not assign EventIngestor to normal users. Confirm Event Grid's documented secure-webhook app-role assignment procedure before subscribing.
+Open the host URL and create the administrator password (12–72 characters). Add source, clean and quarantine Blob connections, then configure Vision One and create scan profiles. Account-key connections need an Azure account access key, not a full connection string. SAS source browsing requires read/list permissions; destination routing needs create/write/read. Provision containers separately in Azure. Connection testing verifies listing; actual routing verifies destination writes and content.
 
-## Build and provision
+For cloud scanning, select the region associated with the API key. For local scanning, enter the existing File Security gRPC endpoint as host:port and select whether it uses TLS. A plain HTTP endpoint or ICAP listener will not work. A key is optional only when the local scanner is configured without authentication. Scans, not a settings save, verify actual scanner connectivity.
 
-```
-docker build -t YOUR_REGISTRY/trendai-v1fs-scanner:VERSION backend
-docker push YOUR_REGISTRY/trendai-v1fs-scanner:VERSION
-az deployment group create --resource-group YOUR_RG --template-file infra/main.bicep --parameters @PRIVATE_PARAMETERS.json
-```
+Profiles default to completion metadata. Upload completed files with metadata `v1fs-complete=true`; clear/reset the marker before any subsequent modification. If this is disabled, manual scanning accepts the currently committed version, and automatic scanning also requires two stable observations. This may not prove producer completion for SFTP/ADLS workloads.
 
-Use an Azure-supported zone-redundant region. This configuration provisions paid PostgreSQL HA, Service Bus Premium, ZRS storage and private endpoints. Never commit PRIVATE_PARAMETERS.json. Supply passwords through a secure deployment system; Key Vault references deliver them to apps. For a private registry, add Container Apps registry managed-identity configuration and AcrPull on the registry; the supplied template assumes the image can already be pulled.
+## Durability and recovery
 
-Run database migrations from inside the VNet using the same image with `MODE=migrate` and the Key Vault DATABASE_URL. Execute migrations before sending traffic; do not run schema changes on every API startup. The SQL bootstrap is idempotent for a fresh installation. Future changes require new numbered migrations and an upgrade runner.
+Persist V1FS_DATA_DIR. It contains scanner.db, SQLite WAL/SHM files, master.key, and instance.lock. Only one process may use it. On graceful shutdown the service cancels worker requests and waits for workers before closing the database. Interrupted jobs are requeued at startup and routing reuses persisted verdict/digest evidence. Retain source versions until all jobs finish. Jobs whose source changed are held/retried without promotion.
 
-Grant the managed identity Storage Blob Data Reader on each source account and the required Azure Files privileged reader role for backup-intent OAuth. Set up private endpoints and DNS for each source. Destination storage is private, shared-key access is disabled, and only the worker identity gets Blob Data Contributor. Keep downstream safe-container readers separate from quarantine; do not grant them account-wide storage roles. For strict separation, use separate destination accounts and identities rather than the single baseline destination account.
+Back up the whole data directory with the service stopped, or use a SQLite-consistent backup process together with the existing master key. Do not regenerate a lost key. Never commit the directory. Existing job snapshots retain their encrypted credentials even after removing a connection; retain or purge backups according to your policy.
 
-Create a profile in the console, then an enabled source with three distinct destination container URLs. Deploy `infra/eventgrid.bicep` against the source storage account after assigning Event Grid's Entra role. Confirm webhook validation. Existing source accounts may need Blob versioning enabled; use ETag conditions as the minimum replacement defense. For SFTP/ADLS configurations where versioning is unavailable, changed objects hold safely and producers must not replace files before processing finishes.
+## Deployment
 
-## Local development
+Build/run instructions are in README.md. Docker Compose provides restart: unless-stopped and a persistent named volume. For a direct process, use an OS service manager in your environment for reboot startup. The desktop-managed host process is persistent across chat turns but is not configured as a reboot-start service.
 
-Copy `.env.example` to `.env` and supply Entra and Azure development credentials. `docker compose up --build` starts PostgreSQL, a migration process and each service role. Service Bus and storage remain real Azure dependencies; this Compose file does not claim to emulate them. Authentication stays enabled locally. Build the console with `npm ci --prefix web && npm run build --prefix web`; serve `dist` on localhost:4173. Use test credentials with minimum privilege.
+V1FS_TLS_CERT/V1FS_TLS_KEY enable HTTPS. The current host LAN URL uses HTTP, so only use it on a trusted network; TLS protects credential entry over broader networks. Host IPs and localhost are supported by the default anti-rebinding check; a hostname deployment would need an explicit allowlist extension.
 
-## Validation
+## Verification
 
-```
-cd backend
-TEST_DATABASE_URL=postgres://USER:PASS@localhost:5432/TEST_DB?sslmode=disable go test -race ./...
-go vet ./...
-RUN_REAL_SDK_TEST=true TM_AM_AUTH_KEY=... TM_REGION=us-east-1 go test ./internal/adapters -run TestOfficialSDKIntegration
-```
+Run `go test -race ./...` and `go vet ./...` in backend, plus `npm run build --prefix web`. Tests use a fake Azure transport and scanner fixture to prove clean/quarantine routing, unknown-verdict holding, source replacement rejection, duplicate suppression and routing recovery without duplicate writes. They also test encrypted credential storage, API redaction, session lifecycle, CSRF rejection and restart persistence. Live Azure/Trend scans are not claimed until real user credentials are provided.
 
-The database test truncates its tables: use a dedicated test database. It submits 2,000 concurrent discovery calls over 1,000 unique files and checks one job/outbox record per identity, revision conflicts and distributed permits. Scanner unit tests are simulated and carry no throughput claim. Real SDK tests require an explicit flag and credentials. Live SDK cost and quotas apply.
+## Troubleshooting
 
-`scripts/load.py` drives real Event Grid ingestion using a manifest of existing uploaded blob identities. EVENT_INGEST_TOKEN must be an authorized short-lived Entra token. Use `--count 1000` for a burst, `--count 10000 --duration 3600` for hourly traffic, and `--count 50000 --duration 86400` for daily traffic. Unique source files are required to measure distinct-file work; cycling a short manifest measures duplicate handling. The script measures ingestion HTTP acceptance only. Separately verify destination digests, terminal counts, no malicious safe objects, memory and actual scan latency. Do not claim those load suites passed unless run end to end.
-
-## Runbook
-
-- Scanner outage: leave queue messages durable; bounded retries move jobs to HELD. Tune global limits conservatively to measured service quotas. This release has no global circuit breaker.
-- Source replaced/deleted: hold/retry; restore the exact source version or discover the new ETag as a separate identity. Never manually force COMPLETED.
-- Destination failure: preserve source, check IAM/network, then requeue the same job after remediation. Create-only routing verifies the existing digest.
-- Poison messages: inspect the native `$DeadLetterQueue`, retain message/correlation evidence, fix the cause and replay deliberately. There is no automated replay tool yet.
-- Lost completion event: set `v1fs-complete=true` only after Blob upload completion; for Azure Files renew `.complete` after a closed upload. Reconciliation rediscovers by immutable identity.
-- Stale operations: reconciliation reissues jobs older than 15 minutes. PostgreSQL and Service Bus locks prevent ordinary concurrent processing. Investigate repeated stalls in JSON logs.
-- Secrets: rotate Key Vault versions, wait for Container Apps secret refresh and restart workers to recreate SDK clients. Never log SDK DumpConfig. Revoke any token pasted into a chat after use.
-- Recovery: restore PostgreSQL PITR into the same private network, pause ingestion, validate job/routing/outbox/audit consistency, verify stored destination digests, restart dispatch/consumers, and replay retained Event Grid events or completion-marked inventory. PostgreSQL is authoritative; never rebuild state solely from queue depth. Run a restore drill before production acceptance.
-
-## Deployment status
-
-Bicep syntax/type validation is distinct from an Azure what-if/deployment. No Azure resources have been created by this build without a subscription login. The console deployment does not activate scanning. See architecture.md for outstanding enterprise features and acceptance tests.
+- Azure connection failures: check account/container spelling, SAS expiry and list/read permissions. Destination routes also need create/write/read.
+- Scanner failures: verify key permissions and region, or gRPC endpoint, TLS and the local service's authentication mode. Bounded retries eventually hold the job.
+- Unknown verdicts: the service fails closed. Unsupported verbose-engine formats require review rather than automatic clean routing.
+- Routing failures: confirm destination credentials, private container access and free host disk. The source remains preserved.
+- Credentials changed: existing jobs use their original snapshot. Save a profile revision and submit again for a new credential/destination snapshot; do not force a job to clean.

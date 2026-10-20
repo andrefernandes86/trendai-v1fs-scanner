@@ -1,27 +1,40 @@
 # trendai-v1fs-scanner
 
-Event-driven Azure file-security gateway with Go services, PostgreSQL job state, Azure Service Bus, official Trend Vision One File Security SDK v1.7.2 and a React/TypeScript console.
+A host-based Azure Blob scanner with a React management console and the official Trend Vision One File Security Go SDK. The console and Go API run together. There is no external gateway, Event Grid, Service Bus, Azure deployment, or Entra setup requirement.
 
-The console is deployable through Sites. Backend services require Azure Container Apps; a frontend deployment alone does not scan files. No fake operational data is seeded.
+## Console workflow
 
-## Implemented
+1. Open the host URL and create the administrator password on first use.
+2. **Blob connections:** mount multiple containers using an account/container name or full Azure container resource ID. Choose storage account key or SAS token authentication. Credentials are encrypted on the host and omitted from API responses. Test and browse each saved connection.
+3. **Vision One config:** enter the API key. Choose **Cloud** and its region, or **Local** and the existing File Security gRPC service's `host:port`. Local TLS is configurable; certificate verification stays enabled with TLS.
+4. **Scan profiles:** create multiple profiles, each with a source connection and separate good-file and bad-file destination connections/prefixes. Set detection options and optional automatic monitoring.
+5. **Storage explorer:** list real Azure objects, select a profile and up to 100 files, then submit scans. Follow verdicts and verified destinations in **File activity**.
 
-- Authenticated Event Grid completion ingestion and Azure Files completion-marker adapter.
-- Immutable source/configuration snapshots, PostgreSQL transactional outbox, optimistic state transitions and audit trails.
-- Distributed scan permits, message-lock renewal, bounded backoff and stale-job reconciliation.
-- Real official SDK options, conservative verdict normalization, create-only clean/quarantine routing with SHA-256 verification.
-- Entra roles, configuration validation, live SSE job-ledger dashboard and management console.
-- Docker Compose, Bicep with private endpoints, CI, database burst tests, simulator tests and an opt-in real-SDK integration test.
+Source, clean, and quarantine must be different containers. No automatic source deletion occurs. Unverified results stay HELD and never go to the good-file destination. Automatic monitoring runs every 30 seconds with stability observations and optional required `v1fs-complete=true` upload metadata. The default profile requires the marker, including for manual requests; disable that option only if your producer's committed-upload contract is suitable.
 
-## Start
-
-Read [operations](docs/operations.md) for prerequisites, local development and Azure deployment. Read [architecture and known gaps](docs/architecture.md) before a production rollout. The baseline has not completed live Azure/Trend acceptance or the entire requested enterprise feature set.
+## Run directly
 
 ```
 npm ci --prefix web
 npm run build --prefix web
 cd backend
-go test ./...
+go build -o ../scanner ./cmd/local
+cd ..
+V1FS_DATA_DIR=./data V1FS_WEB_DIR=./dist PORT=8095 ./scanner
 ```
 
-`.env.example` documents required settings. Never commit credentials. The Azure API requires Entra even in development. Simulator mode is accepted only with `ENVIRONMENT=test` and routing is disabled.
+Open `http://HOST_IP:8095`. Use the host IP or localhost; arbitrary Host headers are rejected. The server can terminate HTTPS directly with V1FS_TLS_CERT and V1FS_TLS_KEY. Configure HTTPS before using this console across untrusted networks.
+
+Alternatively run `docker compose up -d --build`; the persistent `scanner-data` volume contains the encrypted database and encryption key. Back up both together. An initialized database without its key is rejected.
+
+## Verify
+
+```
+cd backend
+go test -race ./...
+go vet ./...
+```
+
+Tests cover secret encryption/redaction, authentication/session invalidation, cross-origin rejection, settings persistence, single-instance locking, concurrent duplicate submission, storage routing, source replacement, and replay without duplicate destination writes. Storage and scanner fixtures are simulated; they do not claim real Azure or Vision One throughput or credential validation. Production scanning uses real SDKs and no simulator is exposed in the console.
+
+See [architecture](docs/architecture.md) and [operations](docs/operations.md).

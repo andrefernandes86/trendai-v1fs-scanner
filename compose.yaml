@@ -1,65 +1,12 @@
 services:
-  postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: gateway
-      POSTGRES_USER: gateway
-      POSTGRES_PASSWORD: local-development-only
-    ports: ['127.0.0.1:5432:5432']
-    volumes: ['postgres:/var/lib/postgresql/data']
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U gateway']
-      interval: 5s
-      retries: 10
-  migrate:
-    build: ./backend
-    environment:
-      MODE: migrate
-      DATABASE_URL: postgres://gateway:local-development-only@postgres/gateway?sslmode=disable
-    depends_on:
-      postgres: {condition: service_healthy}
-  api:
-    build: ./backend
-    env_file: .env
-    environment:
-      MODE: api
-      DATABASE_URL: postgres://gateway:local-development-only@postgres/gateway?sslmode=disable
-      CONSOLE_ORIGIN: http://localhost:4173
-    ports: ['127.0.0.1:8080:8080']
-    depends_on:
-      migrate: {condition: service_completed_successfully}
-  dispatcher:
-    build: ./backend
-    env_file: .env
-    environment: &worker
-      MODE: dispatch
-      DATABASE_URL: postgres://gateway:local-development-only@postgres/gateway?sslmode=disable
-    depends_on:
-      migrate: {condition: service_completed_successfully}
   scanner:
-    build: ./backend
-    env_file: .env
-    environment: {<<: *worker, MODE: scan}
-    depends_on: [dispatcher]
-  promoter:
-    build: ./backend
-    env_file: .env
-    environment: {<<: *worker, MODE: promote}
-    depends_on: [dispatcher]
-  quarantine:
-    build: ./backend
-    env_file: .env
-    environment: {<<: *worker, MODE: quarantine}
-    depends_on: [dispatcher]
-  retry:
-    build: ./backend
-    env_file: .env
-    environment: {<<: *worker, MODE: retry}
-    depends_on: [dispatcher]
-  reconciliation:
-    build: ./backend
-    env_file: .env
-    environment: {<<: *worker, MODE: reconcile}
-    depends_on: [dispatcher]
+    build: .
+    ports: ['8095:8095']
+    environment:
+      PORT: '8095'
+      V1FS_DATA_DIR: /data
+      V1FS_WEB_DIR: /app/dist
+    volumes: ['scanner-data:/data']
+    restart: unless-stopped
 volumes:
-  postgres:
+  scanner-data:
