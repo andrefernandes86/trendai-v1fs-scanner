@@ -17,3 +17,11 @@
 .heading-actions>.button{height:36px;padding:8px 12px;flex:0 0 auto;align-self:center}
 .refresh-controls{flex:0 0 auto;margin-right:4px}
 @media(max-width:800px){.page-heading{flex-wrap:wrap}.heading-actions{width:100%;justify-content:flex-start;margin-top:0}.heading-actions .button{font-size:11px;padding:8px 10px}.heading-actions>.button:first-child{display:inline-flex}.refresh-controls{width:100%;margin:0 0 4px}}
+/* Align header controls by their first row, with refresh status underneath. */
+.heading-actions{position:relative;align-items:flex-start;padding-bottom:22px}
+.heading-actions>.button{align-self:flex-start;height:36px;margin:0}
+.refresh-controls{position:static;display:block}
+.refresh-controls label{height:36px;display:flex;align-items:center;gap:8px}
+.refresh-controls select{height:36px;padding:7px 10px;margin:0}
+.refresh-controls small{position:absolute;left:0;bottom:0;line-height:16px;white-space:nowrap}
+@media(max-width:800px){.heading-actions{padding-bottom:0;align-items:center}.refresh-controls{position:relative;padding-bottom:22px;width:100%;margin-bottom:6px}.heading-actions>.button{align-self:center}}
