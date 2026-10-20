@@ -74,3 +74,26 @@ The installer enables startup at boot but does not kill a foreground instance. S
 For rollback, stop the service, restore the previous binary/frontend together and restore a coordinated data/key backup if a schema downgrade is needed, then restart and run health plus safe/EICAR end-to-end checks. Preserve the current failed state for investigation rather than overwriting your only backup.
 
 See [reliability](reliability.md) for stage budgets, CRC32C evidence, independent source-delete retries, reconciliation, recovery, retention and alert delivery prerequisites.
+
+## Container-first host deployment
+
+The container includes an internal process supervisor/watchdog. Use the normal named volume for a new deployment:
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail 100 scanner
+```
+
+To retain the current host's existing encrypted state, use the host override (the scanner runs as UID/GID 1000, matching its existing data ownership):
+
+```bash
+export V1FS_HOST_DATA_DIR=/home/skynet/Documents/Codex/2026-10-19/files-pasted-by-the-user-vision/work/trendai-host-data
+docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml up -d --build
+```
+
+Stop a previous foreground scanner before starting the container so port 8095 and the data lock are free. Do not run both against the same data. Inspect health with `docker compose ps` and `/livez`; verify actual safe/EICAR routing separately. Keep the persistent data mount through rebuilds; never use `down -v` as an upgrade step. Docker must be enabled at host boot; it is enabled on the current host. The earlier systemd application unit is optional for a direct binary deployment, not required for the container.
+
+The watchdog uses 20 seconds of startup grace, 5-second checks and 3 failed checks before restart. Optional V1FS_WATCHDOG_STARTUP_SECONDS and V1FS_WATCHDOG_INTERVAL_SECONDS settings can be used in controlled tests. A child gets SIGTERM and up to ten seconds before SIGKILL. Docker stop_grace_period is forty seconds. External scanner/storage outages do not trigger liveness restarts; they remain visible retry/assurance conditions. External notification delivery is deferred at the user's request.
+
+Share sources need read, rename, mkdir and delete rights inside their source root. Reserve `.v1fs-claims` for the scanner account. Do not treat claimed files as lost: their original and private paths appear in record details and persist across restarts. Never manually clear claims while jobs are active. Customer load/scale validation is run separately by the customer.

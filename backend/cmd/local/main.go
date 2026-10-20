@@ -13,6 +13,22 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "-supervise":
+			supervise()
+			return
+		case "-healthcheck":
+			if e := healthCheck(); e != nil {
+				log.Print(e)
+				os.Exit(1)
+			}
+			return
+		case "-serve":
+		default:
+			log.Fatal("Unknown command")
+		}
+	}
 	data := os.Getenv("V1FS_DATA_DIR")
 	if data == "" {
 		data = "data"

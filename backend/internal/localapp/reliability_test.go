@@ -120,8 +120,9 @@ func TestCorruptedDestinationPreventsSourceDeletion(t *testing.T) {
 	os.WriteFile(stores["good"].p(m.Key), []byte("corrupted"), 0600)
 	snap.Profile.ControlledWriter = true
 	a.process(context.Background(), id, snap, n+1)
-	if _, e := stores["source"].Stat(s.Key); e != nil {
-		t.Fatal("source deleted despite corruption")
+	claim, _ := a.loadClaim(id)
+	if _, e := stores["source"].Stat(claim.Key); e != nil {
+		t.Fatal("claimed source deleted despite corruption")
 	}
 	var state, dest string
 	a.DB.QueryRow("SELECT state,destination FROM jobs WHERE id=?", id).Scan(&state, &dest)
@@ -177,8 +178,9 @@ func TestUnknownScanRetriesBeforeIsolation(t *testing.T) {
 	if state != "RETRY_PENDING" {
 		t.Fatal(state)
 	}
-	if _, e := stores["source"].Stat(s.Key); e != nil {
-		t.Fatal("source moved before scan retry exhaustion")
+	claim, _ := a.loadClaim(id)
+	if _, e := stores["source"].Stat(claim.Key); e != nil {
+		t.Fatal("claimed source lost before scan retry exhaustion")
 	}
 	a.process(context.Background(), id, snap, n+1)
 	a.DB.QueryRow("SELECT state FROM jobs WHERE id=?", id).Scan(&state)

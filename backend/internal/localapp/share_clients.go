@@ -353,3 +353,6 @@ func (s *smbFS) Close() error {
 	s.session.Logoff()
 	return s.conn.Close()
 }
+
+func (a *azureFiles) Claim(from, to string) error { return a.PublishExclusive(from, to) }
+func (s *smbFS) Claim(from, to string) error      { return s.PublishExclusive(from, to) }

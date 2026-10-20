@@ -142,7 +142,7 @@ func (a *App) verifyDestination(ctx context.Context, m *MoveRecord) error {
 }
 func (a *App) finalizeMove(ctx context.Context, id string, s Snapshot, m MoveRecord) {
 	// Reverify persisted destination before every delete attempt, including restart recovery.
-	if (s.Source.Type() != "blob" || m.Target.Type() != "blob") && !s.Profile.ControlledWriter {
+	if ((s.Source.Type() != "blob" && s.ClaimedKey == "") || m.Target.Type() != "blob") && !s.Profile.ControlledWriter {
 		_ = a.transition(id, "HELD", m.Verdict, m.Digest, m.Destination, "Source retained: confirm an exclusive producer handoff and controlled destination writers for share storage.", 0)
 		return
 	}
@@ -161,7 +161,7 @@ func (a *App) finalizeMove(ctx context.Context, id string, s Snapshot, m MoveRec
 	if e := a.saveMove(id, m); e != nil {
 		return
 	}
-	if s.Source.Type() != "blob" && !s.Profile.ControlledWriter {
+	if s.Source.Type() != "blob" && s.ClaimedKey == "" && !s.Profile.ControlledWriter {
 		_ = a.transition(id, "HELD", m.Verdict, m.Digest, m.Destination, "Destination verified. Source retained until a controlled-writer handoff contract is enabled for this SMB/NFS/Azure Files source.", 0)
 		return
 	}
@@ -224,7 +224,7 @@ func (a *App) routeCaptured(ctx context.Context, id string, s Snapshot, local, d
 		target = s.Bad
 	}
 	key := strings.TrimPrefix(destination, target.BaseURL()+"/")
-	m := MoveRecord{Phase: "DESTINATION_VERIFIED", Destination: destination, Target: target, Key: key, FinalState: state, Verdict: verdict, Digest: digest, CRC32C: crc, Size: n, SourceETag: s.ETag, Rule: rule, Reason: reason}
+	m := MoveRecord{Phase: "DESTINATION_VERIFIED", Destination: destination, Target: target, Key: key, FinalState: state, Verdict: verdict, Digest: digest, CRC32C: crc, Size: n, SourceETag: s.sourceETag(), Rule: rule, Reason: reason}
 	if e = a.verifyDestination(ctx, &m); e != nil {
 		a.retryStage(id, "transfer", s.Profile, verdict, digest, destination, "Destination CRC32C verification failed; source preserved.")
 		return

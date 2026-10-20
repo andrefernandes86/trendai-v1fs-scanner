@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
@@ -17,6 +18,10 @@ import (
 )
 
 type App struct {
+	healthMu   sync.Mutex
+	heartbeats map[string]time.Time
+	started    time.Time
+
 	lockFile        *os.File
 	wg              sync.WaitGroup
 	scanFn          func(context.Context, string, Scanner, Profile) ([]byte, error)
@@ -93,6 +98,8 @@ type Profile struct {
 	Revision            int64  `json:"revision"`
 }
 type Snapshot struct {
+	ClaimedKey         string  `json:"claimedKey,omitempty"`
+	ClaimedETag        string  `json:"claimedETag,omitempty"`
 	Source             Mount   `json:"source"`
 	Good               Mount   `json:"good"`
 	Failed             Mount   `json:"failed"`
@@ -103,6 +110,7 @@ type Snapshot struct {
 	Size               int64
 }
 type Job struct {
+	SourceClaim          map[string]any `json:"sourceClaim,omitempty"`
 	Integrity            map[string]any `json:"integrity,omitempty"`
 	StageAttempts        map[string]int `json:"stageAttempts,omitempty"`
 	NewerCompletedJobID  string         `json:"newerCompletedJobId,omitempty"`
@@ -183,6 +191,7 @@ func Open(data, web string) (*App, error) {
 	_, e = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
 CREATE TABLE IF NOT EXISTS config(kind TEXT NOT NULL,id TEXT NOT NULL,value BLOB NOT NULL,PRIMARY KEY(kind,id));
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS source_claims(job_id TEXT PRIMARY KEY,payload BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS stage_attempts(job_id TEXT NOT NULL,stage TEXT NOT NULL,attempts INTEGER NOT NULL,PRIMARY KEY(job_id,stage));
 CREATE TABLE IF NOT EXISTS move_records(job_id TEXT PRIMARY KEY,payload BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS inventory(profile_id TEXT NOT NULL,key TEXT NOT NULL,etag TEXT NOT NULL,size INTEGER NOT NULL,last_seen TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',job_id TEXT NOT NULL DEFAULT '',PRIMARY KEY(profile_id,key,etag));
@@ -283,9 +292,13 @@ func (a *App) Close() error {
 	return e
 }
 func (a *App) Run(ctx context.Context) {
+	a.healthMu.Lock()
+	a.started = time.Now()
+	a.heartbeats = map[string]time.Time{"monitor": time.Now(), "worker-0": time.Now(), "worker-1": time.Now()}
+	a.healthMu.Unlock()
 	for i := 0; i < 2; i++ {
 		a.wg.Add(1)
-		go func() { defer a.wg.Done(); a.worker(ctx) }()
+		go func(index int) { defer a.wg.Done(); a.workerNamed(ctx, fmt.Sprintf("worker-%d", index)) }(i)
 	}
 	a.wg.Add(1)
 	go func() { defer a.wg.Done(); a.monitor(ctx) }()

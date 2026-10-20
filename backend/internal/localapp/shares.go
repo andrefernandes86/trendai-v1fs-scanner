@@ -243,7 +243,7 @@ func listShare(ctx context.Context, m Mount, prefix, marker string) ([]BlobEntry
 			return left < right
 		})
 		for _, item := range items {
-			if item.Name() == "." || item.Name() == ".." || item.Name() == ".v1fs-staging" || strings.HasSuffix(item.Name(), ".complete") || !validShareName(item.Name()) || item.Mode()&os.ModeSymlink != 0 {
+			if item.Name() == "." || item.Name() == ".." || (item.Name() == ".v1fs-staging" || item.Name() == ".v1fs-claims") || strings.HasSuffix(item.Name(), ".complete") || !validShareName(item.Name()) || item.Mode()&os.ModeSymlink != 0 {
 				continue
 			}
 			key := path.Join(dir, item.Name())
@@ -285,11 +285,11 @@ func downloadShare(ctx context.Context, s Snapshot, dir string) (name, digest st
 		return "", "", e
 	}
 	defer fs.Close()
-	before, e := remoteProperties(fs, s.Key)
-	if e != nil || before.ETag != s.ETag || before.Size != s.Size {
+	before, e := remoteProperties(fs, s.sourceKey())
+	if e != nil || before.ETag != s.sourceETag() || before.Size != s.Size {
 		return "", "", errors.New("source identity changed")
 	}
-	r, e := fs.Open(s.Key)
+	r, e := fs.Open(s.sourceKey())
 	if e != nil {
 		return "", "", e
 	}
@@ -309,7 +309,7 @@ func downloadShare(ctx context.Context, s Snapshot, dir string) (name, digest st
 	if e != nil {
 		return "", "", e
 	}
-	after, e := remoteProperties(fs, s.Key)
+	after, e := remoteProperties(fs, s.sourceKey())
 	if e != nil || n != s.Size || after.ETag != before.ETag {
 		return "", "", errors.New("source changed during download")
 	}

@@ -102,6 +102,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/jobs/{id}/retry", a.retryJob)
 	mux.HandleFunc("GET /api/status", a.status)
 	mux.HandleFunc("GET /api/audit", a.audit)
+	mux.HandleFunc("GET /livez", a.liveness)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		respond(w, 200, map[string]string{"status": "ok", "service": "trendai-v1fs-local"})
 	})

@@ -56,8 +56,14 @@ func (f *diskShare) UploadExclusive(k string, r io.Reader, size int64) error {
 }
 func (f *diskShare) MkdirAll(k string) error                { return os.MkdirAll(f.p(k), 0700) }
 func (f *diskShare) PublishExclusive(from, to string) error { return os.Link(f.p(from), f.p(to)) }
-func (f *diskShare) Remove(k string) error                  { return os.Remove(f.p(k)) }
-func (f *diskShare) Close() error                           { return nil }
+func (f *diskShare) Claim(from, to string) error {
+	if _, e := os.Lstat(f.p(to)); e == nil {
+		return os.ErrExist
+	}
+	return os.Rename(f.p(from), f.p(to))
+}
+func (f *diskShare) Remove(k string) error { return os.Remove(f.p(k)) }
+func (f *diskShare) Close() error          { return nil }
 func TestShareConnectionValidationAndIsolation(t *testing.T) {
 	for _, kind := range []string{"azureFiles", "smb", "nfs"} {
 		m := Mount{ID: "share", Name: "Share", Kind: kind, Account: "storageacct", Share: "incoming", Server: "nas.internal", Username: "scanner", Secret: "password", AuthType: "accountKey", Export: "/incoming", UID: 1000, GID: 1000}

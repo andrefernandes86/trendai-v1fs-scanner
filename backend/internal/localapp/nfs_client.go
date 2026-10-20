@@ -546,3 +546,33 @@ func nfsInfo(name string, a nfs.Fattr) os.FileInfo {
 	}
 	return remoteInfo{name: name, size: a.Size(), mode: mode, at: a.ModTime(), tag: fmt.Sprintf("nfs:%d:%d:%d:%d:%d:%d", a.Fileid, a.Filesize, a.Mtime.Seconds, a.Mtime.Nseconds, a.Ctime.Seconds, a.Ctime.Nseconds)}
 }
+
+// NFSv3 RENAME is atomic within the export. The target namespace is scanner-owned
+// and unique per durable job; an existing target is handled by handoff recovery.
+func (n *nfsFS) Claim(from, to string) error {
+	if e := safeKey(from, false); e != nil {
+		return e
+	}
+	if e := safeKey(to, false); e != nil {
+		return e
+	}
+	if _, e := n.lookupClaimTarget(to); e == nil {
+		return os.ErrExist
+	} else if !os.IsNotExist(e) {
+		return e
+	}
+	fromDir, _, e := n.lookup(path.Dir(from))
+	if e != nil {
+		return e
+	}
+	toDir, _, e := n.lookup(path.Dir(to))
+	if e != nil {
+		return e
+	}
+	_, e = n.call(14, struct {
+		From nfs.Diropargs3
+		To   nfs.Diropargs3
+	}{nfs.Diropargs3{FH: fromDir, Filename: path.Base(from)}, nfs.Diropargs3{FH: toDir, Filename: path.Base(to)}})
+	return e
+}
+func (n *nfsFS) lookupClaimTarget(key string) (os.FileInfo, error) { return n.Stat(key) }

@@ -22,11 +22,13 @@
 
 ## Operator prerequisites / outside application control
 
-- [ ] Run `sudo deploy/install-systemd.sh`, stop the foreground instance and start the installed service on the real host. This sandbox cannot access the user service manager or gain root, so boot activation is not claimed complete.
-- [ ] Configure the customer's external alert delivery/monitoring system to consume authenticated `/api/assurance`. No external notification destination has been provided.
-- [ ] Validate share handoff/permissions with actual SMB/NFS/Azure Files producers before enabling controlled-writer finalization. The application cannot make another writer obey an atomic handoff contract.
-- [ ] Load/soak-test the customer's file counts, sizes, NAS servers, scanner quotas and outage durations. Fixture tests do not establish production capacity or compatibility with every server.
+- [x] Container-first deployment with internal process watchdog, liveness probes and Docker restart policy. The host Docker service is enabled at boot; no application systemd activation is required.
+- [ ] External notifications: explicitly deferred by the user; do not implement or configure delivery yet.
+- [x] Automatic persisted source claim/handoff for SMB/NFS/Azure Files, private-path recovery and original-path replacement protection. Storage administrators must reserve scanner claim namespace permissions; share destinations still need controlled writers.
+- [ ] Customer-owned validation: load/soak-test the customer's file counts, sizes, NAS servers, scanner quotas and outage durations. Fixture tests do not establish production capacity or compatibility with every server.
 
 ## Explicit limits and optional work
 
 Polling cannot detect files removed before observation. Paused uploads can appear stable. NFS supports v3 TCP AUTH_SYS, not NFSv4/Kerberos. Existing destination names are not retroactively renamed. Broad exclusions reduce malware coverage. Existing encrypted ZIP passwords belong to the uploader; the app preserves original bytes and adds no archive encryption. A managed password/archive conversion feature is optional and has not been requested as a concrete workflow.
+
+Watchdog fault tests cover abrupt child termination and a completely stopped/unresponsive child process. External notification code is unchanged.

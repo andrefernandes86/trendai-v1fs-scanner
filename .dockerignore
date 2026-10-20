@@ -6,3 +6,11 @@ node_modules
 **/.env
 **/data
 **/dist
+
+**/test-results
+**/playwright-report
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/master.key
+**/instance.lock

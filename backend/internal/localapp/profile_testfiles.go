@@ -115,7 +115,7 @@ func (a *App) profileTestFile(w http.ResponseWriter, r *http.Request) {
 
 // Remove a source only after destination verification; refuse changed source identities.
 func (a *App) removeVerifiedSource(ctx context.Context, s Snapshot, digest string) error {
-	key := s.Key
+	key := s.sourceKey()
 
 	var err error
 	if s.Source.Type() == "blob" {
@@ -131,7 +131,7 @@ func (a *App) removeVerifiedSource(ctx context.Context, s Snapshot, digest strin
 			// Verify current content and identity again before removing this generated input.
 			info, e := fs.Stat(key)
 			err = e
-			if err == nil && infoTag(info) != s.ETag {
+			if err == nil && infoTag(info) != s.sourceETag() {
 				err = errors.New("source changed after scan")
 			}
 			if err == nil {

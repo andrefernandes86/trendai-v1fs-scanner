@@ -132,7 +132,7 @@ func (a *App) insertJob(s Snapshot) (string, error) {
 }
 func (a *App) Jobs() ([]Job, error) { return a.jobsPage("", nil, 500, 0) }
 func (a *App) jobsPage(where string, args []any, limit, offset int) ([]Job, error) {
-	query := "SELECT j.id,j.key,j.profile_id,j.profile_name,j.source_id,j.etag,j.version,j.size,j.state,j.verdict,j.digest,j.destination,j.error,j.attempts,j.created_at,j.updated_at,COALESCE(d.payload,X''),COALESCE(m.payload,X''),COALESCE((SELECT json_group_object(stage,attempts) FROM stage_attempts WHERE job_id=j.id),'{}'),COALESCE((SELECT n.id FROM jobs n WHERE n.source_id=j.source_id AND n.key=j.key AND n.profile_id=j.profile_id AND n.created_at>j.created_at AND n.state IN ('COMPLETED','QUARANTINED') ORDER BY n.created_at DESC LIMIT 1),'') FROM jobs j LEFT JOIN scan_details d ON d.job_id=j.id LEFT JOIN move_records m ON m.job_id=j.id" + where + " ORDER BY j.created_at DESC,j.id DESC LIMIT ? OFFSET ?"
+	query := "SELECT j.id,j.key,j.profile_id,j.profile_name,j.source_id,j.etag,j.version,j.size,j.state,j.verdict,j.digest,j.destination,j.error,j.attempts,j.created_at,j.updated_at,COALESCE(d.payload,X''),COALESCE(m.payload,X''),COALESCE(c.payload,X''),COALESCE((SELECT json_group_object(stage,attempts) FROM stage_attempts WHERE job_id=j.id),'{}'),COALESCE((SELECT n.id FROM jobs n WHERE n.source_id=j.source_id AND n.key=j.key AND n.profile_id=j.profile_id AND n.created_at>j.created_at AND n.state IN ('COMPLETED','QUARANTINED') ORDER BY n.created_at DESC LIMIT 1),'') FROM jobs j LEFT JOIN scan_details d ON d.job_id=j.id LEFT JOIN move_records m ON m.job_id=j.id LEFT JOIN source_claims c ON c.job_id=j.id" + where + " ORDER BY j.created_at DESC,j.id DESC LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)
 	rows, e := a.DB.Query(query, args...)
 	if e != nil {
@@ -142,10 +142,16 @@ func (a *App) jobsPage(where string, args []any, limit, offset int) ([]Job, erro
 	out := []Job{}
 	for rows.Next() {
 		var j Job
-		var details, moveBytes []byte
+		var details, moveBytes, claimBytes []byte
 		var stages string
-		if e = rows.Scan(&j.ID, &j.Key, &j.ProfileID, &j.ProfileName, &j.SourceID, &j.ETag, &j.Version, &j.Size, &j.State, &j.Verdict, &j.Digest, &j.Destination, &j.Error, &j.Attempts, &j.CreatedAt, &j.UpdatedAt, &details, &moveBytes, &stages, &j.NewerCompletedJobID); e != nil {
+		if e = rows.Scan(&j.ID, &j.Key, &j.ProfileID, &j.ProfileName, &j.SourceID, &j.ETag, &j.Version, &j.Size, &j.State, &j.Verdict, &j.Digest, &j.Destination, &j.Error, &j.Attempts, &j.CreatedAt, &j.UpdatedAt, &details, &moveBytes, &claimBytes, &stages, &j.NewerCompletedJobID); e != nil {
 			return nil, e
+		}
+		if len(claimBytes) > 0 {
+			var c sourceClaim
+			if a.Unseal(claimBytes, &c) == nil {
+				j.SourceClaim = map[string]any{"phase": c.Phase, "originalKey": c.OriginalKey, "claimedKey": c.Key, "sha256": c.Digest}
+			}
 		}
 		if len(moveBytes) > 0 {
 			var m MoveRecord
@@ -213,8 +219,10 @@ func (a *App) claim() (string, Snapshot, int, error) {
 	}
 	return id, s, attempts + 1, nil
 }
-func (a *App) worker(ctx context.Context) {
+func (a *App) worker(ctx context.Context) { a.workerNamed(ctx, "worker-test") }
+func (a *App) workerNamed(ctx context.Context, name string) {
 	for ctx.Err() == nil {
+		a.beat(name)
 		id, s, attempt, e := a.claim()
 		if e != nil {
 			select {
@@ -231,6 +239,14 @@ func (a *App) worker(ctx context.Context) {
 func (a *App) process(parent context.Context, id string, s Snapshot, attempt int) {
 	ctx, cancel := context.WithTimeout(parent, 10*time.Minute)
 	defer cancel()
+	if action, rule := s.Profile.FilePolicy(strings.TrimPrefix(s.Key, s.Source.Prefix+s.Profile.Prefix), s.Size); action == "hold" || action == "ignore" {
+		_ = a.transition(id, "HELD", "NOT_SCANNED", "", "", "Policy "+action+": "+rule, 0)
+		return
+	}
+	if e := a.handoffSource(ctx, id, &s); e != nil {
+		a.retryStage(id, "download", s.Profile, "UNKNOWN", "", "", "Share handoff unavailable or source changed; original/claimed file retained.")
+		return
+	}
 	if move, e := a.loadMove(id); e == nil {
 		if move.Phase == "COMPLETED" {
 			_ = a.transition(id, move.FinalState, move.Verdict, move.Digest, move.Destination, move.Reason, 0)
@@ -334,6 +350,7 @@ func (a *App) monitor(ctx context.Context) {
 				a.recoverySweep(c)
 			}()
 		}
+		a.beat("monitor")
 		profiles, e := a.List("profiles")
 		if e != nil {
 			continue
@@ -363,6 +380,8 @@ func (a *App) monitor(ctx context.Context) {
 			lastRun[p.ID] = time.Now()
 			monitors.Add(1)
 			go func(p Profile) {
+				a.beat("source:" + p.ID)
+				defer a.stopBeat("source:" + p.ID)
 				defer monitors.Done()
 				defer func() { <-slots; activeMu.Lock(); delete(active, p.ID); activeMu.Unlock() }()
 				c, cancel := context.WithTimeout(ctx, 3*time.Minute)

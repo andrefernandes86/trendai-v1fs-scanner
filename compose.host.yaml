@@ -1,0 +1,8 @@
+# Use the existing host data without copying secrets or changing ownership.
+services:
+  scanner:
+    user: "${SCANNER_UID:-1000}:${SCANNER_GID:-1000}"
+    volumes: !override
+      - type: bind
+        source: ${V1FS_HOST_DATA_DIR:?Set V1FS_HOST_DATA_DIR to the existing persistent data directory}
+        target: /data

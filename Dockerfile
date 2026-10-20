@@ -19,4 +19,5 @@ COPY --from=build --chown=65532:65532 /data /data
 ENV V1FS_DATA_DIR=/data V1FS_WEB_DIR=/app/dist PORT=8095
 VOLUME ["/data"]
 EXPOSE 8095
-ENTRYPOINT ["/app/scanner"]
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 CMD ["/app/scanner", "-healthcheck"]
+ENTRYPOINT ["/app/scanner", "-supervise"]

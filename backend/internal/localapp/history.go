@@ -76,7 +76,7 @@ func (a *App) retention(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	for _, table := range []string{"scan_details", "scan_results", "stage_attempts", "move_records"} {
+	for _, table := range []string{"scan_details", "scan_results", "stage_attempts", "move_records", "source_claims"} {
 		if _, e = tx.Exec("DELETE FROM "+table+" WHERE job_id IN (SELECT id FROM jobs WHERE "+filter+")", cutoff); e != nil {
 			problem(w, 500, "Retention failed.")
 			return
