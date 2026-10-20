@@ -87,3 +87,40 @@ func TestStatisticsAndFullCSVExport(t *testing.T) {
 		t.Fatal("export is not authenticated")
 	}
 }
+
+func TestScanIssueCountMatchesHistoryFilterAndPreservesHiddenIssues(t *testing.T) {
+	a := testApp(t)
+	for _, tc := range []struct{ state, verdict string }{{"HELD", "UNKNOWN"}, {"RETRY_PENDING", "UNKNOWN"}, {"QUEUED", "UNKNOWN"}, {"HELD", "NOT_SCANNED"}, {"COMPLETED", "CLEAN"}, {"RECOVERED", "UNKNOWN"}} {
+		s := Snapshot{Profile: Profile{ID: tc.state + tc.verdict}, Key: "sample.txt"}
+		id, e := a.insertJob(s)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if e = a.transition(id, tc.state, tc.verdict, "", "", "", 0); e != nil {
+			t.Fatal(e)
+		}
+		if tc.state == "HELD" && tc.verdict == "UNKNOWN" {
+			if _, e = a.DB.Exec("INSERT INTO hidden_jobs(job_id) VALUES(?)", id); e != nil {
+				t.Fatal(e)
+			}
+		}
+	}
+	w := httptest.NewRecorder()
+	a.statistics(w, httptest.NewRequest("GET", "http://localhost/api/statistics", nil))
+	var result struct {
+		ScanErrors int `json:"scanErrors"`
+	}
+	if e := json.Unmarshal(w.Body.Bytes(), &result); e != nil || result.ScanErrors != 2 {
+		t.Fatal(w.Body.String(), e)
+	}
+	where, args, limit, offset := jobQuery(httptest.NewRequest("GET", "http://localhost/api/jobs/page?issues=scan_errors&visibility=all", nil), 1000)
+	jobs, e := a.jobsPage(where, args, limit, offset)
+	if e != nil || len(jobs) != result.ScanErrors {
+		t.Fatal(jobs, e)
+	}
+	for _, j := range jobs {
+		if j.Verdict != "UNKNOWN" || (j.State != "HELD" && j.State != "RETRY_PENDING") {
+			t.Fatal(j)
+		}
+	}
+}

@@ -75,7 +75,7 @@ Run browser checks against an isolated instance with `PLAYWRIGHT_BROWSERS_PATH=/
 
 ## Container availability
 
-The image supervises the management API and processing engine independently. SDK calls use isolated child processes for safe parallel scanning. Configure Simultaneous scans in each profile (default 2); the shared engine defaults to 8 worker slots, configurable with V1FS_MAX_WORKERS (1–32). Engine recovery leaves the console available. Docker handles container exit and host boot via `restart: unless-stopped`. `/livez` reports API/database liveness plus engine status; container health requires both services. External storage/scanner failures use normal processing retries. Share inputs are atomically claimed before scanning, and claimed ownership survives restart. External notifications remain deferred; customer-scale testing is owned by the customer.
+The image supervises the management API and processing engine independently. SDK calls use isolated child processes for safe parallel scanning. Configure Files scanned at once in each profile's Schedule step (default 2); the shared engine defaults to 8 worker slots, configurable with V1FS_MAX_WORKERS (1–32). Engine recovery leaves the console available. Docker handles container exit and host boot via `restart: unless-stopped`. `/livez` reports API/database liveness plus engine status; container health requires both services. External storage/scanner failures use normal processing retries. Share inputs are atomically claimed before scanning, and claimed ownership survives restart. External notifications remain deferred; customer-scale testing is owned by the customer.
 
 ### Performance validation
 
@@ -91,3 +91,8 @@ See [performance testing](docs/performance-testing.md) for the real-source 1,000
 See [step-by-step user guide](docs/user-guide.md), [transfer performance controls](docs/performance-tuning.md) and [customer architecture and diagrams](docs/poc-architecture.md).
 
 Functional evidence: [archive validation](docs/validation/archive-inspection-20261020.md) and [transfer/console validation](docs/validation/transfer-console-20261020.md).
+
+
+Profile setup now follows six short steps with a final review. Cards expand on demand, light/dark appearance covers the sidebar, and clickable outcome totals include a matching scan-error history filter. See the [illustrated user guide](docs/user-guide.md).
+
+See [wizard and monitoring validation](docs/validation/profile-wizard-20261020.md) for the current regression and live integration checks.

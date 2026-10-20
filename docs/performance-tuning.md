@@ -5,8 +5,8 @@ Scanning and destination transfer use separate, bounded worker pools. A long upl
 ## Start with the defaults
 
 1. Open **Scan profiles → Edit profile**.
-2. Under **Schedule & upload readiness**, choose simultaneous scans. These slots cover capture and scanning.
-3. Under **Transfer performance**, start with:
+2. In **Schedule**, choose **Files scanned at once**. These slots cover capture and scanning.
+3. In **Options → Transfer speed**, start with:
 
    | Setting | Default | Allowed |
    | --- | --- | --- |

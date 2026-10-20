@@ -11,7 +11,7 @@ test('theme preference persists across pages, reload and sign out',async({page})
  await page.getByLabel('Confirm password').fill('test-only-password-2026');await setup.click();
  }else{await page.waitForTimeout(2100);await page.getByLabel('Administrator password').fill('test-only-password-2026');await page.getByRole('button',{name:'Sign in',exact:true}).click()}
  await expect(page.getByRole('heading',{name:'Security overview'})).toBeVisible();
- await expect(toggle).toHaveAttribute('aria-pressed','true');
+ await expect(toggle).toHaveAttribute('aria-pressed','true');await expect(page.locator('.sidebar')).toHaveCSS('background-color','rgb(17, 27, 45)');
  await expect(page.locator('.panel').first()).toHaveCSS('background-color','rgb(25, 37, 56)');
  await page.screenshot({path:`../test-results/theme-dark-${test.info().project.name}.png`,fullPage:true});
  await page.getByRole('button',{name:'Scan profiles',exact:true}).click();await page.getByRole('button',{name:/^(New profile|Create scan profile)$/}).first().click();
@@ -20,6 +20,6 @@ test('theme preference persists across pages, reload and sign out',async({page})
  await page.reload();await expect(page.getByRole('heading',{name:'Scan profiles',exact:true})).toHaveCount(0); // Navigation starts at Overview.
  await expect(page.getByRole('heading',{name:'Security overview'})).toBeVisible();await expect(toggle).toHaveAttribute('aria-pressed','true');
  await toggle.click();await expect(page.locator('html')).toHaveAttribute('data-theme','light');
- await page.reload();await expect(page.getByRole('heading',{name:'Security overview'})).toBeVisible();await expect(toggle).toHaveAttribute('aria-pressed','false');
+ await page.reload();await expect(page.getByRole('heading',{name:'Security overview'})).toBeVisible();await expect(toggle).toHaveAttribute('aria-pressed','false');await expect(page.locator('.sidebar')).toHaveCSS('background-color','rgb(255, 255, 255)');await expect(page.locator('.brand img')).toHaveAttribute('src','/brand/trendai-logo.png');
  await page.getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.getByRole('heading',{name:'Welcome back'})).toBeVisible();await expect(toggle).toHaveAttribute('aria-pressed','false');
 });

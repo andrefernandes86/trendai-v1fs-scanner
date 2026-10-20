@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// Presentation filtering must use the same predicate as the dashboard total.
+const scanIssuePredicate = "j.verdict='UNKNOWN' AND j.state IN ('HELD','RETRY_PENDING')"
+
 func (a *App) queryJobs(r *http.Request) ([]Job, error) {
 	where, args, limit, offset := jobQuery(r, 500)
 	return a.jobsPage(where, args, limit, offset)
@@ -22,6 +25,9 @@ func jobQuery(r *http.Request, maximum int) (string, []any, int, int) {
 		limit = maximum
 	}
 	parts := []string{}
+	if q.Get("issues") == "scan_errors" {
+		parts = append(parts, "("+scanIssuePredicate+")")
+	}
 	if q.Get("visibility") == "visible" {
 		parts = append(parts, "NOT EXISTS(SELECT 1 FROM hidden_jobs h WHERE h.job_id=j.id)")
 	}

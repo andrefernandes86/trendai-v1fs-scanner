@@ -2,7 +2,7 @@
 
 ## Enable and configure
 
-Open **Scan profiles → Edit profile → Compressed-file inspection** and select **Enable archive extraction and member scans**. The option defaults to off for both new and existing profiles. Changes apply to newly queued job snapshots; existing queued/held work retains its original policy. Use a separate test profile or linked recovery with the current policy to validate new settings.
+Open **Scan profiles → Edit profile → Protection → Archive scanning** and select **Enable archive extraction and member scans**. Open **Archive settings** to set its budgets. The option defaults to off for both new and existing profiles. Changes apply to newly queued job snapshots; existing queued/held work retains its original policy. Use a separate test profile or linked recovery with the current policy to validate new settings.
 
 Supported extraction formats are ZIP/ZIP64 (stored/deflate methods), TAR and GZIP, including nested combinations. ZIP-based documents and packages are recognized by signature or supported extension. RAR, 7z, BZIP2, XZ, Zstandard, CAB and ISO are not extracted by this release. Detected unsupported archives fail closed when this option is enabled. With the option off, the original file continues through the normal SDK scan path.
 

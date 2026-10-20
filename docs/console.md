@@ -41,7 +41,7 @@ Profile sections 6–8 configure quiet periods/temporary ignores, retries, exclu
 
 ## Parallel processing
 
-Set **Simultaneous scans** in profile section 3 (default 2, range 1–32). The shared engine has 8 worker slots by default; an operator can change V1FS_MAX_WORKERS (1–32). Slots include download, scan, route and finalization. Raising a limit releases eligible queued work; lowering it waits for existing active files. The console and engine are independent processes with independent watchdog recovery. Overview shows engine state, shared capacity, Pending scans and Scanning now. Profile edits reuse an existing active source-version job instead of enqueueing duplicates.
+Set **Files scanned at once** in the profile wizard's **Schedule** step (default 2, range 1–32). The shared engine has 8 worker slots by default; an operator can change V1FS_MAX_WORKERS (1–32). Scan slots cover download and scanning; separate transfer slots cover routing and finalization. Raising a limit releases eligible queued work; lowering it waits for existing active files. The console and engine are independent processes with independent watchdog recovery. Overview shows engine state, shared capacity, Pending scans and Scanning now. Profile edits reuse an existing active source-version job instead of enqueueing duplicates.
 
 ## Complete file history
 
@@ -60,3 +60,8 @@ The profile editor includes **Large files & size policy**: maximum submitted siz
 Files are submitted unchanged through the SDK; the app does not truncate or split at 2 GiB. Engine inspection limits still apply. Optional profile-controlled archive inspection is now available; see [its limits and behavior](archive-inspection.md). See the [PoC architecture](poc-architecture.md) for controls, diagrams and validation boundaries.
 
 ![Large-file profile controls](images/profile-large-files.png)
+
+
+## Guided profiles and expandable views
+
+Profile setup uses Source → Destinations → Schedule → Protection → Options → Review. Optional controls start collapsed. Save requires an explicit action from Review; validation returns to and opens a field's step if needed. Profile cards show a compact summary and expand through View details. Light mode includes the sidebar and standard official logo; dark mode uses the inverse logo. Overview outcome cards open matching history views, with a dedicated Scan errors filter for unknown held/retry-pending records.

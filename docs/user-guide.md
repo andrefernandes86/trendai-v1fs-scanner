@@ -69,61 +69,82 @@ The key needs File Security scanning permission. A saved configuration is not pr
 
 Scanner diagnostics test connectivity/scanning directly. They do **not** prove that a profile's source-to-destination routing works. Use the profile test in step 5 for that.
 
-## 4. Create a scan profile
+## 4. Create a scan profile in six steps
 
-Open **Scan profiles → New profile** (or **Create scan profile** when no profiles exist). A profile describes one workflow: where files arrive, how they are scanned and where results go.
+Open **Scan profiles → New profile**. Use **Next** to continue, **Back** to return, or the numbered step buttons to jump between sections. Your choices stay in place as you move. Nothing is saved until **Review → Save profile**. Missing or out-of-range fields are highlighted on their step before saving.
 
-1. Give it a display name, such as **Document scanning**.
-2. Under **Source**, select **Incoming files**. Leave the source prefix blank unless you want only one folder scanned.
-3. Under **Destinations**, choose **Clean files**, **Malicious files** and **Scan failed** in their corresponding sections. Leave destination prefixes blank to use each location's root.
-4. Enable **automatic source scanning** and choose a frequency, such as **30 seconds**. The minimum is 10 seconds.
-5. Set **Simultaneous scans** to the number of files this profile may process at once (default **2**). The shared engine has **8** slots by default, so a higher profile setting cannot exceed available capacity. Start conservatively and increase after checking scanner quotas and storage performance.
-6. Keep the initial detection/retry settings unless your security administrator needs different behavior.
-7. Click **Save profile**.
+### Step 1 — Source
 
-![Source and routing settings](images/profile-routing.png)
+Give the profile a name such as **Document scanning**. Select **Incoming files** as its source. Leave the source folder/prefix blank to include every file, or enter a prefix such as `invoices/`. Subfolders are included.
 
-The three destinations each have their own selection:
+![Wizard step 1: name and source](images/profile-source.png)
 
-![Clean, malicious and scan-failed destinations](images/profile-destinations.png)
+### Step 2 — Destinations
 
-Only the profile's source is monitored. Its destinations are not automatically scanned by that profile. Avoid overlapping sources across profiles so two workflows do not compete for the same inputs.
+Choose one storage connection for each result: **Clean files**, **Malicious files** and **Scan failed**. Leave the subfolder blank to use that connection's root. Only the source is monitored. A source file is removed after its destination copy passes integrity verification.
 
-A profile slot stays occupied through download, scanning and routing. Lowering concurrency lets existing work finish before admitting more. Changes to concurrency apply to the existing queue, while each job keeps its captured scan/routing policy. The management console runs independently of the engine and shows whether it is running or recovering.
+![Wizard step 2: result destinations](images/profile-destinations.png)
 
-The frequency controls when the tool checks for files; it is not a promise to finish every scan in that time. A new file must stay unchanged across checks before admission. Uploads that are still changing wait; a paused upload can appear stable. Large batches also take time to discover and process.
+### Step 3 — Schedule
 
-### What do the other options do?
+Turn on **Scan new files automatically** to watch the source. Set **Check for new files every (seconds)** to a polling interval, for example **30**. Set **Files scanned at once** to the concurrency you want; **2** is the starting value. Leave automatic scanning off to start scans from Storage explorer yourself.
 
-| Option | When/how to use it |
-|---|---|
-| Predictive machine learning | Enables the scanner's PML detection option. Follow your security policy. |
-| Active content detection | Enables inspection for active content such as document scripting/macros. |
-| SPN feedback | Enables the SDK's Smart Protection Network feedback option. Follow your organization's feedback/data-sharing policy. |
-| Verbose scan results | Requests detailed engine results, useful when investigating detections or scan exceptions. |
-| Digest calculation | Requests scanner-calculated file digests. Transfer integrity checks still use the application's own SHA-256/CRC32C verification. |
-| Result tags | Enter comma-separated `key=value` pairs, such as `scanned=true,team=finance`. Common tags apply to clean/malicious results; result-specific tags add or override values. Blob uses tags; shares use a JSON sidecar. |
-| Quiet period | How long a file must remain unchanged across observations before scanning. Keep the default for an initial test. |
-| Retry limits | Maximum attempts, including the first, for scanning, copying and source deletion separately. The retry delay grows between failures. |
-| Temporary-file ignore patterns | One pattern per line, for example `*.part`. Matching files stay at source and are not scanned. |
-| Scanner-managed destination shares | Confirm this only when no other application writes to the share destinations. Reserve `.v1fs-claims` in share sources for the scanner account. |
-| Exclusions/hold rules | Optional exceptions. Hold leaves matches at source. Bypass sends matches to clean storage as **NOT SCANNED** after integrity checks; it does not establish that they are safe. Use **Preview matches** before saving. |
-| Failed-file recovery | Optionally retry isolated UNKNOWN jobs later. Set the wait in seconds (3,600 = one hour) and maximum recovery cycles. Exhausted files stay isolated for manual review. Detected malware is not automatically recovered. |
-| Processing alert threshold | Raises a console alert for overdue work. It does not delete or discard files. |
+![Wizard step 3: a focused schedule page](images/profile-schedule.png)
 
-For pattern examples, rule priority and recovery details, see [the profile reference](console.md#exclusions-and-hold-rules). You can leave rules and temporary ignore patterns empty to scan all ready source files.
+The tool checks that uploads have settled before admitting them. **How scheduling works** contains the technical details. Scan workers download and scan; transfer workers deliver and verify files separately.
+
+### Step 4 — Protection
+
+Choose **Detect suspicious files** and **Detect active content** according to your security policy. Open **Scan report preferences** for detailed responses, scanner file hashes and SPN feedback.
+
+For archives, enable **archive extraction and member scans**. Open **Archive settings** to adjust nesting, count, size, ratio and time budgets. See [archive inspection](archive-inspection.md) for format and protection details.
+
+![Wizard step 4: detection and archive choices](images/profile-protection.png)
+
+### Step 5 — Options
+
+The defaults are ready to use. Open only the setting you want to customize:
+
+| Section | What it controls |
+| --- | --- |
+| Result tags | Extra `key=value` labels, such as `team=finance`. Scan status and verdict tags are automatic. |
+| Large-file handling | Scan size, large-file concurrency, timeout and the action for bigger files. Bypassed files are explicitly **NOT SCANNED**. |
+| Transfer speed | How many files are delivered together and Azure Blob upload tuning. |
+| Upload checks and retries | Quiet period, separate scan/copy/delete attempts, retry delay, temporary-file patterns and share ownership. |
+| Exclusions and hold rules | Optional path/size exceptions. Hold leaves files at source. Bypass routes them to clean storage as **NOT SCANNED** after integrity verification. Use Preview matches first. |
+| Failed-file recovery | Scheduled rescans of isolated unknown files, with a wait and recovery budget. |
+
+![Wizard step 5: optional settings stay collapsed](images/profile-options.png)
+
+### Step 6 — Review and save
+
+Check the source, all three destinations, schedule, protection and file-handling actions. Use an **Edit** link to revisit a section. Click **Save profile** when ready. The wizard closes and the profile appears in the list.
+
+![Wizard step 6: review before saving](images/profile-review.png)
+
+### Compact and expanded profile views
+
+Cards initially show the name, schedule, concurrency and source, with **Edit profile** and **Scan source** always visible. Click **View details** to expand source monitoring, destinations, detection settings and test-file controls. Click it again to collapse.
+
+![Compact profile cards](images/scan-profile.png)
+
+![Expanded profile card](images/scan-profile-expanded.png)
+
+Each job keeps its captured routing/detection policy. Live scan admission uses the profile's current scan concurrency. Transfers use their own bounded pool and captured limits. See [performance controls](performance-tuning.md) for tuning and restart behavior.
 
 ## 5. Run your first end-to-end test
 
-Open **Scan profiles** and find your profile.
+Open **Scan profiles**, find your profile and click **View details** to reveal its test-file buttons.
 
-![Profile card with test-file controls](images/scan-profile.png)
+![Expanded profile card with test-file controls](images/scan-profile-expanded.png)
 
 1. Click **Safe file** under **Create test input**. This uploads a benign test file into that profile's source.
 2. Wait for the source check, stability check and scan. If automatic scanning is off, click **Scan source**, select the test file in Storage explorer and submit it with the correct profile.
 3. Open **File activity**. The safe test should finish as **CLEAN / COMPLETED**.
 4. Check the clean destination in **Storage explorer**. Its new filename includes the original name and a job ID. The source copy should be gone after successful verification/deletion.
 5. Return to the profile and click **EICAR file**. EICAR is an antivirus test pattern, not an executable malware sample. It should finish as **MALICIOUS / QUARANTINED** in malicious storage.
+
+![Storage explorer source selection and scan controls](images/storage-explorer.png)
 
 These profile buttons exercise the real storage, scheduler, scanner and routing path. The app copies original bytes; it does not wrap files in ZIPs or add archive passwords. Existing password-protected archives cannot be inspected without decryption by their owner and must not be treated as clean just because they could not be scanned.
 
@@ -135,6 +156,7 @@ In **Overview → Files scanned**:
 
 - **Pending scans** shows files queued for scanning, including files waiting for a scan retry. It excludes held files and pending transfers with known verdicts.
 - **Scanning now** shows jobs currently in the scanning stage, including source download and waiting for scanner access. It excludes queued files and destination transfers. Zero can simply mean the scanner is idle.
+- **Transferring** shows files being delivered and verified; **Pending transfers** shows the waiting transfer queue.
 - **Past minute/hour/24 hours/30 days** are rolling totals for jobs with a scanner response. They are not queue counts. Open **How counts are calculated** for details.
 - Set **Auto-refresh** to the update interval you want, or choose Off and use **Refresh**. The current count is a snapshot from the latest refresh. This setting is available on Overview, File activity and Audit log, and is remembered in your browser.
 
@@ -195,7 +217,7 @@ Choose **Sizing calculator**, directly after Audit log. It starts with 12,000 fi
 
 ![Sizing calculator with transparent planning inputs](images/sizing-calculator.png)
 
-Adjust the inputs to your real workload, especially measured time through download/scan/verified move, file sizes and retention. Open **Advanced disk and retention assumptions** and **Formulas and limits** to inspect the model. Calculator changes do not change profiles, delete history or configure hardware. Use the resulting concurrency as a starting point in **Scan profiles → Edit → Simultaneous scans** and ensure the shared engine worker cap is high enough. Profile settings above that cap do not create additional workers. Validate representative documents, large files/archives, retries and storage latency before treating this as a capacity commitment.
+Adjust the inputs to your real workload, especially measured time through download/scan/verified move, file sizes and retention. Open **Advanced settings — timing, bursts and storage** and **Formulas and limits** to inspect the model. Calculator changes do not change profiles, delete history or configure hardware. Use the resulting concurrency as a starting point in **Scan profiles → Edit profile → Schedule → Files scanned at once** and ensure the shared engine worker cap is high enough. Profile settings above that cap do not create additional workers. Validate representative documents, large files/archives, retries and storage latency before treating this as a capacity commitment.
 
 These are application planning estimates, not vendor-certified requirements. Cloud scanner compute is hosted by Trend; local scanner compute must be sized separately using the scanner's own guidance. [File Security overview](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-what-is-file-security) · [Containerized scanner](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-file-security-containerized-scanner).
 
@@ -205,7 +227,7 @@ These are application planning estimates, not vendor-certified requirements. Clo
 
 ## Configure large files
 
-Open **Scan profiles → Edit profile → Large files & size policy**. Keep the default **100 GB maximum** to submit larger original files through the SDK. The app does not truncate at 2 GiB. Start with **Simultaneous large files = 1** and measure before increasing it. Set **Maximum job duration** to include capture, scan and verified routing (default six hours per attempt).
+Open **Scan profiles → Edit profile → Options → Large-file handling**. Keep the default **100 GB maximum** to submit larger original files through the SDK. The app does not truncate at 2 GiB. Start with **Simultaneous large files = 1** and measure before increasing it. Set **Maximum job duration** to include capture, scan and verified routing (default six hours per attempt).
 
 Above the threshold choose **Hold at source**, **Move to scan failed**, or **Move to clean — NOT SCANNED**. Both move options apply scanned=false, verdict=not_scanned and reason=oversized; neither generates a clean verdict. Use the scan-failed destination/prefix for an oversized review folder. Test actions with a small threshold on a dedicated profile. Moved files still require verified destination bytes before source removal.
 
@@ -215,11 +237,11 @@ An SDK verdict does not prove every byte/member was inspected. Scanner inspectio
 
 ## Inspect compressed files
 
-In **Scan profiles → Edit profile → Compressed-file inspection**, enable extraction and member scans, then set a nesting limit from **1 to 20 layers**, file count, total/member expanded sizes, expansion ratio, extraction time and concurrency. Defaults are off / 5 layers / 1,000 entries / 10 GB total / 2 GB per member / 100× / 300 seconds / one inspection. Unsupported, encrypted, corrupt or over-budget archives never qualify as clean. The original and every extracted member must scan successfully before clean routing. [Step-by-step behavior, protections and testing](archive-inspection.md).
+In **Scan profiles → Edit profile → Protection → Archive scanning**, enable extraction and member scans, then set a nesting limit from **1 to 20 layers**, file count, total/member expanded sizes, expansion ratio, extraction time and concurrency. Defaults are off / 5 layers / 1,000 entries / 10 GB total / 2 GB per member / 100× / 300 seconds / one inspection. Unsupported, encrypted, corrupt or over-budget archives never qualify as clean. The original and every extracted member must scan successfully before clean routing. [Step-by-step behavior, protections and testing](archive-inspection.md).
 
 ## Choose light or dark mode
 
-Use **Dark mode / Light mode** in the upper-right header. On a narrow screen the button shows a moon or sun icon. The same toggle is on the sign-in page. Your choice is saved in this browser and survives page changes, sign-out and reload. The first visit follows the operating system's appearance preference.
+Use **Dark mode / Light mode** in the upper-right header. On a narrow screen the button shows a moon or sun icon. The same toggle is on the sign-in page. Both the workspace and left menu follow this setting, including the logo. Your choice is saved in this browser and survives page changes, sign-out and reload. The first visit follows the operating system's appearance preference.
 
 ![Dark overview](images/overview-dark.png)
 
@@ -242,3 +264,17 @@ See [transfer tuning](performance-tuning.md) for queue controls and file timing 
 Sizing fields include examples for daily file counts, processing windows, average versus maximum sizes, and storage allowances. Expand **Size units and a worked example** for MiB/GB conversions and the 12,000-file example. Advanced timing, peak-arrival and spare-capacity descriptions reflect the values you enter.
 
 ![Sizing units and worked example](images/sizing-legend.png)
+
+## Click an overview total to see its files
+
+The **Files submitted**, **Clean promotions**, **Quarantined files** and **Scan errors** cards open File activity with a matching filter. The **Storage connections** card opens the connection list.
+
+**Scan errors** counts unknown results that are currently held or waiting for retry. Resolved/recovered records and files intentionally held without scanning are excluded. The same filter is available under **File activity → Scan issues → Unknown results — held or retrying**. Clicking the card includes hidden records so its list matches the total. Hiding a row does not clear its error or its assurance alert. Use **Clear filters** to return to the full list.
+
+![File activity filtered to scan issues](images/file-activity-errors.png)
+
+## Review configuration changes
+
+Open **Audit log** to see saved configuration changes, processing decisions and operator actions. Use auto-refresh or Refresh for the latest entries, and Export JSON to keep a copy.
+
+![Audit log with demonstration configuration events](images/audit-log.png)

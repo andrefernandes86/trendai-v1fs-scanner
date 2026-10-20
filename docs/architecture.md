@@ -21,7 +21,7 @@ The supervisor initializes the database/key before launching either service, and
 
 The API has a four-connection SQLite pool, with per-connection busy timeout and foreign-key settings. The engine serializes its database writes through one connection. WAL permits API reads while the engine writes. Indexed history pagination and indexed newer-version lookups avoid holding database access during repeated unindexed history scans. Browser auto-refresh requests do not overlap.
 
-The default engine capacity is **8 active files across all profiles**. Set `V1FS_MAX_WORKERS` (1–32) to change it. Each profile's **Simultaneous scans** setting defaults to 2 and accepts 1–32. Admission checks live per-profile limits atomically against SCANNING/ROUTING jobs, so a saturated profile does not block eligible profiles behind it. The effective limit is bounded by available global workers. A slot covers download, scanning, routing and finalization; this conservatively caps scanner requests too. Lowering a limit waits for active jobs to finish. Raising it admits queued jobs without changing their captured scan/routing policy. Diagnostics and explicit historical enrichment are direct administrator actions outside the queued worker pool.
+The default engine capacity is **8 active files across all profiles**. Set `V1FS_MAX_WORKERS` (1–32) to change it. Each profile's **Schedule → Files scanned at once** setting defaults to 2 and accepts 1–32. Admission checks live per-profile limits atomically against SCANNING jobs, so a saturated profile does not block eligible profiles behind it. The effective limit is bounded by available global workers. A scan slot covers download and scanning. A separate bounded transfer pool covers routing and finalization. Lowering a limit waits for active jobs to finish. Raising it admits queued jobs without changing their captured scan/routing policy. Diagnostics and explicit historical enrichment are direct administrator actions outside the queued worker pool.
 
 ## State and security
 
@@ -78,3 +78,7 @@ flowchart LR
   Tags --> Delete[Conditional source deletion]
   Delete --> History[(History, timings and audit)]
 ```
+
+## Guided console
+
+The profile editor has six client-side steps: Source, Destinations, Schedule, Protection, Options and Review. Its draft is retained across steps, all fields are validated before save, and technical settings are disclosed on demand. The backend profile schema and processing rules are unchanged by the wizard. Overview scan-issue totals and File activity use one shared SQL predicate so the displayed count and filtered list agree, including hidden history when explicitly opened from a card.

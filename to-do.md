@@ -64,3 +64,11 @@ Watchdog fault tests cover abrupt child termination and a completely stopped/unr
 - [x] Independent bounded scan/transfer pools; per-profile total/large transfer limits and Blob upload tuning.
 - [x] One leased SHA-256/CRC32C Blob readback, capture checksum reuse, stage timings and CSV timing export.
 - [ ] New customer-sized performance/soak measurements after transfer optimization; prior benchmark numbers remain historical.
+
+## Guided configuration and monitoring views
+
+- [x] Six-step profile wizard, draft preservation, final review and cross-step validation.
+- [x] Short schedule/detection help, with optional and technical settings disclosed on demand.
+- [x] Full light sidebar with the official standard logo, alongside the dark inverse logo.
+- [x] Compact/expanded profile cards and accessible outcome-card filtering.
+- [x] Shared scan-error count/filter definition, including hidden unresolved records on explicit drill-down.

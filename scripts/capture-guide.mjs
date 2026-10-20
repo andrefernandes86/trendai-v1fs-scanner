@@ -13,13 +13,24 @@ try{
  }
  const r=await page.request.put(base+'/api/profiles/guide-profile',{data:{id:'guide-profile',name:'Document scanning',sourceMount:'guide-incoming',goodMount:'guide-clean',badMount:'guide-malicious',failedMount:'guide-failed',scanIntervalSeconds:30,enabled:false,revision:0,pml:true,activeContent:true,digest:true,scannedTags:'scanned=true',cleanTags:'verdict=clean',maliciousTags:'verdict=malicious'}});if(!r.ok())throw new Error(await r.text());
  await page.reload();await page.getByRole('heading',{name:'Security overview'}).waitFor();await page.getByLabel('Auto-refresh interval').selectOption('0');
- async function shot(name){await page.locator('.brand img').evaluate(img=>img.decode());await page.screenshot({path:new URL(name,output).pathname,fullPage:false})}
+ async function shot(name){await page.locator('.brand img').evaluate(img=>img.decode());await page.waitForTimeout(200);await page.screenshot({path:new URL(name,output).pathname,fullPage:false})}
  await shot('overview.png');await page.getByRole('button',{name:'Dark mode',exact:true}).click();await shot('overview-dark.png');await page.getByRole('button',{name:'Dark mode',exact:true}).click();
  await page.getByRole('button',{name:'Storage connections',exact:true}).click();await shot('storage-connections.png');
  await page.getByRole('button',{name:'Add connection',exact:true}).click();await shot('add-connection.png');await page.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.getByRole('button',{name:'Vision One config',exact:true}).click();await shot('scanner-settings.png');
- await page.getByRole('button',{name:'Scan profiles',exact:true}).click();await shot('scan-profile.png');
- await page.getByRole('button',{name:'Edit profile',exact:true}).click();await shot('profile-routing.png');await page.locator('.profile-section').filter({has:page.getByRole('heading',{name:'2. Where results go',exact:true})}).screenshot({path:new URL('profile-destinations.png',output).pathname});await page.getByRole('heading',{name:'Large files & size policy',exact:true}).locator('..').screenshot({path:new URL('profile-large-files.png',output).pathname});await page.getByLabel('Enable archive extraction and member scans',{exact:false}).check();await page.getByLabel('Maximum archive layers',{exact:false}).fill('20');await page.getByLabel('Maximum archive layers',{exact:false}).blur();await page.getByRole('heading',{name:'Compressed-file inspection',exact:true}).locator('..').screenshot({path:new URL('profile-archives.png',output).pathname});await page.getByRole('button',{name:'Cancel',exact:true}).click();
- await page.getByRole('button',{name:'File activity',exact:true}).click();await shot('file-activity.png');
+ await page.getByRole('button',{name:'Scan profiles',exact:true}).click();await shot('scan-profile.png');await page.getByText('View details',{exact:true}).click();await shot('scan-profile-expanded.png');
+ await page.getByRole('button',{name:'Edit profile',exact:true}).click();
+ async function step(name){await page.getByRole('button',{name:new RegExp('^Step \\d: '+name+'$')}).click()}
+ async function dialogShot(name){await page.getByRole('dialog',{name:'Scan profile',exact:true}).screenshot({path:new URL(name,output).pathname})}
+ await dialogShot('profile-source.png');await shot('profile-routing.png');
+ await step('Destinations');await dialogShot('profile-destinations.png');
+ await step('Schedule');await dialogShot('profile-schedule.png');
+ await step('Protection');await dialogShot('profile-protection.png');
+ await page.getByLabel('Enable archive extraction and member scans',{exact:false}).check();await page.getByText('Archive settings',{exact:true}).click();await page.getByLabel('Maximum archive layers',{exact:false}).fill('20');await page.getByLabel('Maximum archive layers',{exact:false}).blur();await page.getByRole('heading',{name:'Archive scanning',exact:true}).locator('..').screenshot({path:new URL('profile-archives.png',output).pathname});
+ await step('Options');await dialogShot('profile-options.png');await page.getByText('Large-file handling',{exact:true}).click();await page.locator('details.profile-option-group').filter({has:page.locator('summary',{hasText:'Large-file handling'})}).screenshot({path:new URL('profile-large-files.png',output).pathname});
+ await step('Review');await dialogShot('profile-review.png');await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.getByRole('button',{name:'File activity',exact:true}).click();await shot('file-activity.png');await page.getByLabel('Scan issue filter').selectOption('scan_errors');await shot('file-activity-errors.png');
+ await page.getByRole('button',{name:'Storage explorer',exact:true}).click();await page.locator('.explorer-toolbar select').selectOption('guide-incoming');await shot('storage-explorer.png');
+ await page.getByRole('button',{name:'Audit log',exact:true}).click();await shot('audit-log.png');
  await page.getByRole('button',{name:'Sizing calculator',exact:true}).click();await shot('sizing-calculator.png');
 }finally{await browser.close()}
