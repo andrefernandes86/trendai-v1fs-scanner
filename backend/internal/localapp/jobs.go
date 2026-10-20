@@ -238,6 +238,14 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 			_ = a.transition(id, "HELD", "UNKNOWN", digest, "", "Content differs from previously scanned bytes.", 0)
 			return
 		}
+	} else if verifiedDigest != "" && verdict == "UNKNOWN" {
+		var recorded string
+		if a.DB.QueryRow("SELECT verdict FROM scan_results WHERE job_id=?", id).Scan(&recorded) == nil && recorded == "UNKNOWN" {
+			a.routeScanFailure(ctx, id, s, path, digest, "Scanner returned an unverified result. Manual review required.")
+			return
+		}
+		a.routeScanFailure(ctx, id, s, path, digest, "Scanner failed after retries. Manual review required.")
+		return
 	} else {
 		raw, scanErr := a.Scan(ctx, path, s.Scanner, s.Profile)
 		if scanErr != nil {
@@ -260,38 +268,20 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		verifiedDigest = digest
 	}
 
-	dest, prefix, state := s.Good, s.Profile.GoodPrefix, "COMPLETED"
-	if verdict == "MALICIOUS" {
-		dest, prefix, state = s.Bad, s.Profile.BadPrefix, "QUARANTINED"
-	}
-	name := strings.Trim(prefix, "/")
-	if name != "" {
-		name += "/"
-	}
-	name += id + "/" + s.Key
-	fullKey := name
-	if dest.Prefix != "" {
-		fullKey = strings.Trim(dest.Prefix, "/") + "/" + name
-	}
-	if !core.ValidKey(fullKey) {
-		_ = a.transition(id, "HELD", verdict, digest, "", "Invalid destination key.", 0)
-		return
-	}
 	if e = a.transition(id, "ROUTING", verdict, digest, "", "", 0); e != nil {
 		return
 	}
-	tags, e := s.Profile.ResultTags(verdict)
+	destination, state, e := routeResult(ctx, id, s, path, digest, verdict)
 	if e != nil {
-		fail(e.Error())
+		fail("Destination transfer, tags or SHA-256 verification failed. Check destination write/read and tag permissions. Original preserved.")
+		a.Audit("routing.failed", id, "Verified scan result could not be published to its configured destination.")
 		return
 	}
-	if e = Route(ctx, dest, fullKey, path, digest, id, verdict, s.Size, tags); e != nil {
-		fail("Destination copy or SHA-256 verification failed. Original file preserved.")
-		return
-	}
-	if e = a.transition(id, state, verdict, digest, dest.BaseURL()+"/"+fullKey, "", 0); e == nil {
+	if e = a.transition(id, state, verdict, digest, destination, "", 0); e == nil {
+		a.Audit("routing.verified", id, "Published and SHA-256 verified: "+destination)
 		a.cleanupTestFile(ctx, s, digest)
 	}
+
 }
 func (a *App) monitor(ctx context.Context) {
 	ticker := time.NewTicker(time.Second)
@@ -323,24 +313,23 @@ func (a *App) monitor(ctx context.Context) {
 
 // Unverified bytes are isolated in the failed destination, never in the clean destination.
 func (a *App) routeScanFailure(ctx context.Context, id string, s Snapshot, local, digest, reason string) {
-	if s.Failed.ID == "" {
-		_ = a.transition(id, "HELD", "UNKNOWN", digest, "", reason+" Configure a scan failed destination for new jobs.", 0)
+	if e := a.transition(id, "ROUTING", "UNKNOWN", digest, "", reason, 0); e != nil {
 		return
 	}
-	key := strings.Trim(s.Failed.Prefix+s.Profile.FailedPrefix, "/")
-	if key != "" {
-		key += "/"
-	}
-	key += id + "/" + s.Key
-	if !core.ValidKey(key) {
-		_ = a.transition(id, "HELD", "UNKNOWN", digest, "", reason+" Invalid failed destination path.", 0)
+	destination, _, err := routeResult(ctx, id, s, local, digest, "UNKNOWN")
+	if err != nil {
+		state := "RETRY_PENDING"
+		var attempts int
+		_ = a.DB.QueryRow("SELECT attempts FROM jobs WHERE id=?", id).Scan(&attempts)
+		if attempts >= 5 {
+			state = "HELD"
+		}
+		_ = a.transition(id, state, "UNKNOWN", digest, "", reason+" Failed destination unavailable; original preserved.", time.Minute)
+		a.Audit("routing.failed", id, "Scan failed destination could not be verified.")
 		return
 	}
-	if err := Route(ctx, s.Failed, key, local, digest, id, "UNKNOWN", s.Size, map[string]string{"scanned": "false", "verdict": "scan_failed"}); err != nil {
-		_ = a.transition(id, "HELD", "UNKNOWN", digest, "", reason+" Failed destination transfer failed; original preserved.", 0)
-		return
-	}
-	_ = a.transition(id, "HELD", "UNKNOWN", digest, s.Failed.BaseURL()+"/"+key, reason, 0)
+	_ = a.transition(id, "HELD", "UNKNOWN", digest, destination, reason, 0)
+	a.Audit("routing.verified", id, "Unverified scan isolated for review: "+destination)
 }
 
 // monitorProfile reads only the profile source; destinations are used only when routing.

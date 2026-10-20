@@ -172,7 +172,9 @@ func (f *fakeAzure) Do(r *http.Request) (*http.Response, error) {
 	key := r.URL.Path
 	status := 200
 	var b []byte
-	if r.Method == "PUT" {
+	if r.Method == "PUT" && r.URL.Query().Get("comp") == "tags" {
+		status = 204
+	} else if r.Method == "PUT" {
 		if _, ok := f.objects[key]; ok && r.Header.Get("If-None-Match") == "*" {
 			status = 412
 		} else {
@@ -203,8 +205,8 @@ func TestRealStorageAdapterRoutingAndRecovery(t *testing.T) {
 	storageTransport = fake
 	t.Cleanup(func() { storageTransport = nil })
 	source, good, bad := testMount("source", "incoming"), testMount("good", "clean"), testMount("bad", "quarantine")
-	base := Snapshot{Source: source, Good: good, Bad: bad, Scanner: Scanner{Type: "local", Address: "scanner:50051"}, Profile: Profile{ID: "policy", Name: "Policy", Revision: 1, GoodPrefix: "approved", BadPrefix: "blocked"}, Key: "report.txt", ETag: `"v1"`, Size: 12}
-	for _, tc := range []struct{ name, raw, state, container string }{{"clean", `{"scanId":"test","scanResult":0}`, "COMPLETED", "/clean/"}, {"malicious", `{"scanId":"test","scanResult":1}`, "QUARANTINED", "/quarantine/"}, {"unknown", `{}`, "HELD", ""}} {
+	base := Snapshot{Source: source, Good: good, Bad: bad, Failed: testMount("failed", "scan-failed"), Scanner: Scanner{Type: "local", Address: "scanner:50051"}, Profile: Profile{ID: "policy", Name: "Policy", Revision: 1, GoodPrefix: "approved", BadPrefix: "blocked"}, Key: "report.txt", ETag: `"v1"`, Size: 12}
+	for _, tc := range []struct{ name, raw, state, container string }{{"clean", `{"scanId":"test","scanResult":0}`, "COMPLETED", "/clean/"}, {"malicious", `{"scanId":"test","scanResult":1}`, "QUARANTINED", "/quarantine/"}, {"unknown", `{}`, "HELD", "/scan-failed/"}} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := base
 			s.Profile.ID = tc.name

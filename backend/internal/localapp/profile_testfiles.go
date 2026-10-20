@@ -114,7 +114,7 @@ func (a *App) profileTestFile(w http.ResponseWriter, r *http.Request) {
 
 // Cleanup is restricted to app-generated test files with the exact scanned digest.
 func (a *App) cleanupTestFile(ctx context.Context, s Snapshot, digest string) {
-	key := s.Source.Prefix + s.Key
+	key := s.Key
 	var owned generatedTestFile
 	if a.Get("testfiles", testFileID(s.Source, key), &owned) != nil || owned.Digest != digest {
 		return

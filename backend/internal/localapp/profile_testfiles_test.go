@@ -53,7 +53,7 @@ func TestProfileGeneratedInputsAndCleanup(t *testing.T) {
 		if e = a.Get("testfiles", testFileID(m, key), &owned); e != nil {
 			t.Fatal(e)
 		}
-		s := Snapshot{Source: m, Key: out.Key, ETag: info.ETag, Size: info.Size, Profile: p}
+		s := Snapshot{Source: m, Key: key, ETag: info.ETag, Size: info.Size, Profile: p}
 		a.cleanupTestFile(context.Background(), s, "wrong-digest")
 		if _, e := fs.Stat(key); e != nil {
 			t.Fatal("removed unverified input")
