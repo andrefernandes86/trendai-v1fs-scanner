@@ -8,6 +8,8 @@ test('profile policy editor and responsive toolbar remain usable',async({page})=
  }else{await page.waitForTimeout(2100); // Respect server authentication throttle.
  await page.getByLabel('Administrator password').fill('test-only-password-2026');await page.getByRole('button',{name:'Sign in',exact:true}).click()}
  await expect(page.getByRole('heading',{name:'Security overview'})).toBeVisible();
+ await expect(page.getByTestId('scan-metric-now')).toContainText('Scanning now');
+ await expect(page.getByTestId('scan-metric-now')).toContainText('0');
  await expect(page.getByLabel('Auto-refresh interval')).toBeVisible();
  await page.getByLabel('Auto-refresh interval').selectOption('0');
  for(const id of ['source','clean','malicious','failed']){const result=await page.request.put('/api/mounts/e2e-'+id,{data:{id:'e2e-'+id,name:'E2E '+id,kind:'blob',account:'e2etestaccount',container:'e2e-'+id,authType:'sas',secret:'sig=test-only'}});expect(result.ok()).toBeTruthy()}

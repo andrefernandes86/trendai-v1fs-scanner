@@ -13,6 +13,8 @@ Enter comma-separated key=value tags. Common tags combine with clean/malicious t
 
 ## Refresh and export
 
+Overview shows **Scanning now** before the historical totals. It counts all jobs currently in the SCANNING stage, including source download and waiting for the scanner, excluding queued work and destination transfers. It is a snapshot updated on page refresh.
+
 Overview, File activity and Audit log offer Off/5s/10s/30s/1m/5m auto-refresh. Settings persist in the browser. Other pages do not automatically refresh. Manual Refresh is available. CSV export covers all historical jobs, not only the current table or filter, and includes verdict, malicious/unknown status, hash presence and SHA-256, timestamps, state, source, destination, errors and attempts. JSON export on File activity/Audit log covers currently loaded records.
 
 ## Detection details and older uploads

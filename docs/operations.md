@@ -8,7 +8,7 @@ Source credentials need list/read/delete. Destination credentials need write/rea
 
 Back up the SQLite database, its WAL consistently, and master.key together using a coordinated backup or stopped service. Do not commit runtime data or credentials. A database without its key cannot be decrypted. Persistent data must survive upgrades; never reinitialize it to resolve configuration errors.
 
-The current manual foreground host process is not a reboot-persistent service. Docker Compose is available, but an automatic system service remains pending. Stop the previous process before starting another; a single-instance lock protects the database.
+The current host runs the supervised Docker container with restart policy and persistent data. Do not start a second scanner against its database.
 
 ## Troubleshooting
 
@@ -25,55 +25,21 @@ Existing unknown files created before the verbose TrendX parsing fix are histori
 
 ## Deploy on the current host
 
-The checked-out application is at `/home/skynet/Documents/Codex/2026-10-19/files-pasted-by-the-user-vision/trendai-v1fs-scanner`. Persistent customer state is in the sibling `work/trendai-host-data` directory. The console is served at `http://192.168.1.52:8095`.
+The running console is **http://192.168.1.52:8095**. Container: `trendai-v1fs-scanner-1`. Repository: `/home/skynet/Documents/Codex/2026-10-19/files-pasted-by-the-user-vision/trendai-v1fs-scanner`.
 
-Build frontend assets from the repository root:
-
-```bash
-npm ci --prefix web
-npm run build --prefix web
-```
-
-Build the backend using a compatible Go installation (see `backend/go.mod`):
+From that repository, preserve the existing database and key by using the host override:
 
 ```bash
-cd backend
-go test ./...
-go build -o ../../work/trendai-v1fs-local.next ./cmd/local
+export V1FS_HOST_DATA_DIR=/home/skynet/Documents/Codex/2026-10-19/files-pasted-by-the-user-vision/work/trendai-host-data
+docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml up -d --build
+docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml ps
+docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml logs --tail 100 scanner
+curl --fail http://127.0.0.1:8095/livez
 ```
 
-On this host a downloaded Go installation is available at `../../work/toolchain/go/bin/go` relative to `backend`; the existing build uses `GOPATH=/tmp/trendai-go` and `GOCACHE=/tmp/trendai-gocache`.
+For an upgrade, first keep a coordinated data/key backup and record the prior image ID. Rebuild and recreate using the same command and data path. Do not remove the data mount or run `down -v`. Sign in after deployment, confirm saved connections and profiles, and verify safe/EICAR routing. Health alone does not validate remote credentials. Roll back by restoring the prior image and recreating the same service; restore a coordinated backup only when a schema downgrade requires it. Preserve failed-state evidence before restoring.
 
-Stop the running instance cleanly before replacing its executable. From the parent workspace directory, replace the binary and start it with the existing data directory:
-
-```bash
-mv work/trendai-v1fs-local.next work/trendai-v1fs-local
-V1FS_DATA_DIR="$PWD/work/trendai-host-data" \
-V1FS_WEB_DIR="$PWD/trendai-v1fs-scanner/dist" \
-PORT=8095 ./work/trendai-v1fs-local
-```
-
-Verify `/healthz`, sign in, confirm the last source check advances, and run a benign test file through a profile to verify a real CLEAN result, destination checksum verification and source removal. An HTTP health response alone does not prove the scanner or storage credentials work. Use EICAR separately to verify malicious routing. Check the job and audit records for deletion errors. Retain a rollback binary and a consistent database/key backup; do not assume database migrations are automatically reversible.
-
-This is a foreground deployment; its lifetime depends on the terminal/process supervisor. A restricted systemd service and root installer are provided in deploy/. Activate them on the host as administrator. Do not create a second instance against the same data directory. Never copy runtime credentials or databases into GitHub.
-
-## Persistent service and rollback
-
-From the repository root, after building and backing up data/key:
-
-```bash
-sudo APP_USER=skynet deploy/install-systemd.sh
-# Stop the existing foreground process first to release the single-instance lock.
-sudo systemctl start trendai-v1fs-scanner
-sudo systemctl status trendai-v1fs-scanner
-sudo journalctl -u trendai-v1fs-scanner -n 100
-```
-
-The installer enables startup at boot but does not kill a foreground instance. Service activation requires real host administrator privileges; this sandbox cannot activate it. Source credentials need delete permission; Blob destinations additionally need lease/tag permissions. For share handoff, producers must stop modifying a transferred file and destination writers must be controlled.
-
-For rollback, stop the service, restore the previous binary/frontend together and restore a coordinated data/key backup if a schema downgrade is needed, then restart and run health plus safe/EICAR end-to-end checks. Preserve the current failed state for investigation rather than overwriting your only backup.
-
-See [reliability](reliability.md) for stage budgets, CRC32C evidence, independent source-delete retries, reconciliation, recovery, retention and alert delivery prerequisites.
+The direct-binary and optional `deploy/` systemd files are alternatives for other installations, not the current host deployment. Never run both alongside the container on the same port/data directory.
 
 ## Container-first host deployment
 

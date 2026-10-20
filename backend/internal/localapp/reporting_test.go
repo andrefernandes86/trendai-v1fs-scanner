@@ -32,6 +32,10 @@ func TestStatisticsAndFullCSVExport(t *testing.T) {
 	if e = tx.Commit(); e != nil {
 		t.Fatal(e)
 	}
+	// Include active jobs outside the latest-500 table, but exclude queued/routing jobs.
+	if _, e = a.DB.Exec("UPDATE jobs SET state='SCANNING' WHERE id IN ('3','504'); UPDATE jobs SET state='QUEUED' WHERE id='4'; UPDATE jobs SET state='ROUTING' WHERE id='5'"); e != nil {
+		t.Fatal(e)
+	}
 	// One historical clean result, one old malicious result, and one new unknown response.
 	old := time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339Nano)
 	if _, e = a.DB.Exec("INSERT INTO scan_results(job_id,scanned_at,verdict) VALUES('1',?,'MALICIOUS'),('2',?,'UNKNOWN')", old, stamp()); e != nil {
@@ -40,10 +44,14 @@ func TestStatisticsAndFullCSVExport(t *testing.T) {
 	w := httptest.NewRecorder()
 	a.statistics(w, httptest.NewRequest("GET", "http://localhost/api/statistics", nil))
 	var out struct {
-		Counts map[string]int `json:"counts"`
+		Counts      map[string]int `json:"counts"`
+		ScanningNow int            `json:"scanningNow"`
 	}
 	if e = json.Unmarshal(w.Body.Bytes(), &out); e != nil {
 		t.Fatal(e)
+	}
+	if out.ScanningNow != 2 {
+		t.Fatalf("scanning now = %d, want 2", out.ScanningNow)
 	}
 	if out.Counts["minute"] != 2 || out.Counts["hour"] != 2 || out.Counts["day"] != 3 || out.Counts["month"] != 3 {
 		t.Fatal(out.Counts)

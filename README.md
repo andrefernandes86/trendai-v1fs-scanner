@@ -2,6 +2,14 @@
 
 A host-based Azure Blob, Azure Files, SMB and NFSv3 scanner with a React management console and the official Trend Vision One File Security Go SDK. The console and Go API run together. There is no external gateway, Event Grid, Service Bus, Azure deployment, or Entra setup requirement.
 
+## Start here
+
+**New user? Follow the [illustrated step-by-step user guide](docs/user-guide.md)**: connect storage, configure scanning, create a profile, test safe/EICAR routing, monitor files and export results. No coding is required to use the console.
+
+- Current host: [open the console](http://192.168.1.52:8095).
+- Administrator: [deploy, back up and upgrade](docs/operations.md#container-first-host-deployment).
+- Technical reference: [architecture](docs/architecture.md), [profile options](docs/console.md), [reliability](docs/reliability.md).
+
 ## Console workflow
 
 1. Open the host URL and create the administrator password on first use.
@@ -16,7 +24,7 @@ Clean results go to clean storage, malicious results to malicious storage, and u
 
 New destination filenames use `original-name_<job-id>.ext`, e.g. `report_<job-id>.zip`. Files retain their original bytes and format: the app does not create ZIP archives or add archive passwords. Existing archive passwords belong to the uploader and cannot be recovered by the app. Earlier transfers retain their previous destination paths.
 
-The Overview, File activity and Audit log pages offer browser-persisted auto-refresh settings. Overview reports rolling minute/hour/day/30-day counts. CSV export includes the entire job history; the activity view shows the latest 500 records. See [console usage](docs/console.md) and [pending work](to-do.md).
+The Overview, File activity and Audit log pages offer browser-persisted auto-refresh settings. Overview shows Scanning now plus rolling minute/hour/day/30-day counts. CSV export includes the entire job history; the activity view offers filtered, paginated history. See [console usage](docs/console.md) and [pending work](to-do.md).
 
 ## Run directly
 

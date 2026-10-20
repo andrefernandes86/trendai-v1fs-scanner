@@ -11,6 +11,11 @@ import (
 func (a *App) statistics(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	counts := map[string]int{}
+	var scanningNow int
+	if err := a.DB.QueryRow("SELECT count(*) FROM jobs WHERE state='SCANNING'").Scan(&scanningNow); err != nil {
+		problem(w, 500, "Scan statistics unavailable.")
+		return
+	}
 	for label, start := range map[string]time.Time{"minute": now.Add(-time.Minute), "hour": now.Add(-time.Hour), "day": now.Add(-24 * time.Hour), "month": now.Add(-30 * 24 * time.Hour)} {
 		var countsTemp int
 		// Older records have no scan timestamp; use their last update as a labeled estimate.
@@ -21,7 +26,7 @@ func (a *App) statistics(w http.ResponseWriter, r *http.Request) {
 		}
 		counts[label] = countsTemp
 	}
-	respond(w, 200, map[string]any{"counts": counts, "observedAt": now.Format(time.RFC3339Nano), "note": "Distinct file-version jobs with a scanner response, counted once. Rolling windows; month = 30 days. Older records use their last update time when no scan timestamp was recorded."})
+	respond(w, 200, map[string]any{"counts": counts, "scanningNow": scanningNow, "observedAt": now.Format(time.RFC3339Nano), "note": "Scanning now counts jobs in the scanning stage, including source download and waiting for the scanner. Queued jobs and destination transfers are excluded. Historical totals count distinct file-version jobs with a scanner response once. Rolling windows; month = 30 days. Older records use their last update time when no scan timestamp was recorded."})
 }
 
 // Prevent spreadsheet programs from interpreting user-controlled fields as formulas.
