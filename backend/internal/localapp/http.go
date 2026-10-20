@@ -453,7 +453,25 @@ func (a *App) status(w http.ResponseWriter, r *http.Request) {
 		states[s] = n
 	}
 	rows.Close()
-	respond(w, 200, map[string]any{"states": states, "observedAt": stamp(), "mode": "local-host", "scannerConfigured": func() bool { var s Scanner; return a.Get("scanner", "default", &s) == nil }()})
+	respond(w, 200, map[string]any{"states": states, "monitor": func() map[string]any {
+		result := map[string]any{}
+		rows, e := a.DB.Query("SELECT id,value FROM config WHERE kind='monitorStatus'")
+		if e != nil {
+			return result
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			var b []byte
+			if rows.Scan(&id, &b) == nil {
+				var v map[string]any
+				if a.Unseal(b, &v) == nil {
+					result[id] = v
+				}
+			}
+		}
+		return result
+	}(), "observedAt": stamp(), "mode": "local-host", "scannerConfigured": func() bool { var s Scanner; return a.Get("scanner", "default", &s) == nil }()})
 }
 func (a *App) audit(w http.ResponseWriter, r *http.Request) {
 	rows, e := a.DB.Query("SELECT id,at,action,object_id,detail FROM audit WHERE action!='authThrottle.saved' ORDER BY id DESC LIMIT 300")

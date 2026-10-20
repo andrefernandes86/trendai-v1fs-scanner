@@ -316,44 +316,7 @@ func (a *App) monitor(ctx context.Context) {
 				continue
 			}
 			lastRun[p.ID] = time.Now()
-			var m Mount
-			if a.Get("mounts", p.SourceMount, &m) != nil {
-				continue
-			}
-			marker := ""
-			for ctx.Err() == nil {
-				cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-				files, next, e := ListBlobs(cctx, m, p.Prefix, marker)
-				cancel()
-				if e != nil {
-					a.Audit("monitor.error", p.ID, "Cannot list source; verify stored Azure credentials and permissions.")
-					break
-				}
-				for _, f := range files {
-					if p.RequireMarker && !f.Complete {
-						continue
-					}
-					modified, e := time.Parse(time.RFC3339, f.Modified)
-					if e != nil || time.Since(modified) < 60*time.Second {
-						continue
-					}
-					var first int64
-					e = a.DB.QueryRow("INSERT INTO observations(profile_id,key,etag,first_seen) VALUES(?,?,?,?) ON CONFLICT(profile_id,key) DO UPDATE SET first_seen=CASE WHEN observations.etag=excluded.etag THEN observations.first_seen ELSE excluded.first_seen END,etag=excluded.etag RETURNING first_seen", p.ID, f.Key, f.ETag, time.Now().Unix()).Scan(&first)
-					if e != nil || time.Now().Unix()-first < 30 {
-						continue
-					}
-					cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-					_, e = a.enqueueExpected(cctx, p.ID, f.Key, f.ETag)
-					cancel()
-					if e != nil {
-						a.Audit("monitor.skipped", p.ID, fmt.Sprintf("File not eligible: %s", f.Key))
-					}
-				}
-				if next == "" {
-					break
-				}
-				marker = next
-			}
+			a.monitorProfile(ctx, p)
 		}
 	}
 }
@@ -378,4 +341,68 @@ func (a *App) routeScanFailure(ctx context.Context, id string, s Snapshot, local
 		return
 	}
 	_ = a.transition(id, "HELD", "UNKNOWN", digest, s.Failed.BaseURL()+"/"+key, reason, 0)
+}
+
+// monitorProfile reads only the profile source; destinations are used only when routing.
+func (a *App) monitorProfile(ctx context.Context, p Profile) {
+	var m Mount
+	summary := map[string]any{"checkedAt": stamp(), "sourceMount": p.SourceMount, "listed": 0, "queued": 0, "waitingForMarker": 0, "waitingForStability": 0, "errors": 0}
+	defer func() {
+		if b, e := a.Seal(summary); e == nil {
+			_, _ = a.DB.Exec("INSERT INTO config(kind,id,value) VALUES('monitorStatus',?,?) ON CONFLICT(kind,id) DO UPDATE SET value=excluded.value", p.ID, b)
+		}
+	}()
+	if a.Get("mounts", p.SourceMount, &m) != nil {
+		summary["message"] = "Source connection is unavailable."
+		summary["errors"] = 1
+		return
+	}
+	marker := ""
+	listed, queued, missing, waiting, failures := 0, 0, 0, 0, 0
+	for ctx.Err() == nil {
+		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		files, next, e := ListBlobs(cctx, m, p.Prefix, marker)
+		cancel()
+		if e != nil {
+			failures++
+			summary["message"] = "Cannot list source. Check its credentials and read permissions."
+			break
+		}
+		for _, f := range files {
+			listed++
+			if p.RequireMarker && !f.Complete {
+				missing++
+				continue
+			}
+			// Completed uploads are eligible on this poll. Unmarked uploads must remain unchanged across polls.
+			if !f.Complete {
+				var first int64
+				e = a.DB.QueryRow("INSERT INTO observations(profile_id,key,etag,first_seen) VALUES(?,?,?,?) ON CONFLICT(profile_id,key) DO UPDATE SET first_seen=CASE WHEN observations.etag=excluded.etag THEN observations.first_seen ELSE excluded.first_seen END,etag=excluded.etag RETURNING first_seen", p.ID, f.Key, f.ETag, time.Now().Unix()).Scan(&first)
+				if e != nil {
+					failures++
+					continue
+				}
+				if time.Now().Unix()-first < 10 {
+					waiting++
+					continue
+				}
+			}
+			cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			_, e = a.enqueueExpected(cctx, p.ID, f.Key, f.ETag)
+			cancel()
+			if e != nil {
+				failures++
+				continue
+			}
+			queued++
+		}
+		if next == "" {
+			break
+		}
+		marker = next
+	}
+	summary["listed"], summary["queued"], summary["waitingForMarker"], summary["waitingForStability"], summary["errors"] = listed, queued, missing, waiting, failures
+	if _, ok := summary["message"]; !ok {
+		summary["message"] = fmt.Sprintf("Source only: %d files checked; %d eligible (existing jobs reused); %d waiting for completion marker; %d waiting for stability; %d errors.", listed, queued, missing, waiting, failures)
+	}
 }
