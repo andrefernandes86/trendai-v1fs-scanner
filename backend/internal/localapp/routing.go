@@ -16,7 +16,7 @@ func routeResult(ctx context.Context, id string, s Snapshot, local, digest, verd
 	var prefix string
 	var tags map[string]string
 	switch verdict {
-	case "CLEAN", "EXCLUDED":
+	case "CLEAN", "EXCLUDED", "OVERSIZED_CLEAN":
 		target, prefix, state = s.Good, s.Profile.GoodPrefix, "COMPLETED"
 	case "MALICIOUS":
 		target, prefix, state = s.Bad, s.Profile.BadPrefix, "QUARANTINED"
@@ -29,7 +29,9 @@ func routeResult(ctx context.Context, id string, s Snapshot, local, digest, verd
 	if sameStorageRoot(s.Source, target) {
 		return "", "", errors.New("destination must differ from source")
 	}
-	if verdict == "EXCLUDED" {
+	if verdict == "OVERSIZED" || verdict == "OVERSIZED_CLEAN" {
+		tags = map[string]string{"scanned": "false", "verdict": "not_scanned", "reason": "oversized"}
+	} else if verdict == "EXCLUDED" {
 		tags = map[string]string{"scanned": "false", "verdict": "excluded"}
 	} else if verdict == "CLEAN" || verdict == "MALICIOUS" {
 		tags, err = s.Profile.ResultTags(verdict)

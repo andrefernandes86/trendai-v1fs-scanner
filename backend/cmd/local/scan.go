@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 )
 
 func runIsolatedScan() {
@@ -24,7 +23,7 @@ func runIsolatedScan() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, request.Profile.JobTimeout())
 	defer cancel()
 	response, err := (&localapp.App{}).ScanDirect(ctx, request.Path, request.Scanner, request.Profile)
 	result := localapp.ScanReply{Response: response}

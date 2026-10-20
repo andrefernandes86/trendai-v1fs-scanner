@@ -5,6 +5,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type FileRule struct {
@@ -25,6 +26,18 @@ func globMatch(pattern, key string) bool {
 	re, e := regexp.Compile("^(?:" + expression + ")$")
 	return e == nil && (re.MatchString(key) || (!strings.Contains(pattern, "/") && re.MatchString(path.Base(key))))
 }
+
+const DefaultMaxScanBytes int64 = 100_000_000_000
+
+func (p Profile) MaxScanSize() int64 {
+	if p.MaxScanBytes == 0 {
+		return DefaultMaxScanBytes
+	}
+	return p.MaxScanBytes
+}
+func (p Profile) JobTimeout() time.Duration {
+	return time.Duration(defaultInt(p.JobTimeoutSeconds, 21600)) * time.Second
+}
 func (p Profile) FilePolicy(key string, size int64) (string, string) {
 	// Hold always wins over bypass. Rules are case-sensitive and operate on slash-normalized relative paths.
 	for _, action := range []string{"hold", "exclude"} {
@@ -39,9 +52,32 @@ func (p Profile) FilePolicy(key string, size int64) (string, string) {
 			return "ignore", pattern
 		}
 	}
+	if size > p.MaxScanSize() {
+		switch p.OversizeAction {
+		case "clean":
+			return "oversize_clean", "size_limit"
+		case "failed":
+			return "oversize_failed", "size_limit"
+		default:
+			return "hold", "oversized: exceeds profile maximum scan size"
+		}
+	}
 	return "scan", ""
 }
 func (p Profile) ReliabilityValidate() error {
+	if p.MaxScanBytes < 0 || p.MaxScanBytes > DefaultMaxScanBytes {
+		return fmt.Errorf("Maximum scan size must be 1–100 GB, or zero for 100 GB.")
+	}
+	if p.OversizeAction != "" && p.OversizeAction != "hold" && p.OversizeAction != "clean" && p.OversizeAction != "failed" {
+		return fmt.Errorf("Invalid oversized file action.")
+	}
+	if p.LargeFileScans < 0 || p.LargeFileScans > 8 {
+		return fmt.Errorf("Large-file concurrency must be 1–8, or zero for 1.")
+	}
+	if p.JobTimeoutSeconds != 0 && (p.JobTimeoutSeconds < 60 || p.JobTimeoutSeconds > 172800) {
+		return fmt.Errorf("Job timeout must be 60–172800 seconds, or zero for 21600.")
+	}
+
 	if p.SimultaneousScans < 0 || p.SimultaneousScans > 32 {
 		return fmt.Errorf("Simultaneous scans must be between 1 and 32, or 0 for the default of 2.")
 	}

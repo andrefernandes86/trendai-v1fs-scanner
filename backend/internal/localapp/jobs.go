@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/andrefernandes86/trendai-v1fs-scanner/internal/core"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -64,10 +65,6 @@ func (a *App) enqueueExpected(ctx context.Context, id, key, expected string) (st
 		if expected != "" && strings.Trim(s.ETag, "\"") != strings.Trim(expected, "\"") {
 			return "", errors.New("file changed during discovery; waiting for stability")
 		}
-
-		if s.Size > 2<<30 {
-			return "", errors.New("file exceeds 2 GiB host policy")
-		}
 	} else {
 		c, e := s.Source.BlobClient(key, "")
 		if e != nil {
@@ -85,9 +82,6 @@ func (a *App) enqueueExpected(ctx context.Context, id, key, expected string) (st
 			return "", errors.New("source changed during discovery; waiting for stability")
 		}
 		s.Size = *props.ContentLength
-		if s.Size > 2<<30 {
-			return "", errors.New("file exceeds 2 GiB host policy")
-		}
 		if props.VersionID != nil {
 			s.Version = *props.VersionID
 		}
@@ -208,18 +202,22 @@ func (a *App) claim() (string, Snapshot, int, error) {
 	if err != nil {
 		return "", s, 0, err
 	}
+	largeLimits := "CASE j.profile_id"
 	limits := "CASE j.profile_id"
 	parameters := []any{time.Now().Unix()}
 	for _, raw := range profiles {
 		var p Profile
 		if json.Unmarshal(raw, &p) == nil {
+			largeLimits += fmt.Sprintf(" WHEN '%s' THEN %d", strings.ReplaceAll(p.ID, "'", "''"), defaultInt(p.LargeFileScans, 1))
 			limits += " WHEN ? THEN ?"
 			parameters = append(parameters, p.ID, min(defaultInt(p.SimultaneousScans, 2), WorkerLimit()))
 		}
 	}
 	limits += " ELSE 2 END"
+	largeLimits += " ELSE 1 END"
 	if len(parameters) == 1 {
 		limits = "2"
+		largeLimits = "1"
 	}
 	tx, e := a.DB.Begin()
 	if e != nil {
@@ -229,7 +227,7 @@ func (a *App) claim() (string, Snapshot, int, error) {
 	var id string
 	var b []byte
 	var attempts int
-	e = tx.QueryRow("SELECT j.id,j.snapshot,j.attempts FROM jobs j WHERE j.state IN ('QUEUED','RETRY_PENDING') AND j.available_at<=? AND (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.state IN ('SCANNING','ROUTING')) < "+limits+" ORDER BY j.created_at,j.id LIMIT 1", parameters...).Scan(&id, &b, &attempts)
+	e = tx.QueryRow("SELECT j.id,j.snapshot,j.attempts FROM jobs j WHERE j.state IN ('QUEUED','RETRY_PENDING') AND j.available_at<=? AND (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.state IN ('SCANNING','ROUTING')) < "+limits+" AND (j.size < 1000000000 OR (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.size>=1000000000 AND active.state IN ('SCANNING','ROUTING')) < "+largeLimits+") ORDER BY j.created_at,j.id LIMIT 1", parameters...).Scan(&id, &b, &attempts)
 	if e != nil {
 		return "", s, 0, e
 	}
@@ -266,11 +264,33 @@ func (a *App) workerNamed(ctx context.Context, name string) {
 			}
 			continue
 		}
-		a.process(ctx, id, s, attempt)
+		func() {
+			done := make(chan struct{})
+			go func() {
+				ticker := time.NewTicker(5 * time.Second)
+				deadline := time.NewTimer(s.Profile.JobTimeout() + time.Minute)
+				defer deadline.Stop()
+				defer ticker.Stop()
+				for {
+					select {
+					case <-done:
+						return
+					case <-deadline.C:
+						return
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						a.beat(name)
+					}
+				}
+			}()
+			defer close(done)
+			a.process(ctx, id, s, attempt)
+		}()
 	}
 }
 func (a *App) process(parent context.Context, id string, s Snapshot, attempt int) {
-	ctx, cancel := context.WithTimeout(parent, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(parent, s.Profile.JobTimeout())
 	defer cancel()
 	if action, rule := s.Profile.FilePolicy(strings.TrimPrefix(s.Key, s.Source.Prefix+s.Profile.Prefix), s.Size); action == "hold" || action == "ignore" {
 		_ = a.transition(id, "HELD", "NOT_SCANNED", "", "", "Policy "+action+": "+rule, 0)
@@ -292,7 +312,18 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 	if e := a.DB.QueryRow("SELECT verdict,digest FROM jobs WHERE id=?", id).Scan(&verdict, &verifiedDigest); e != nil {
 		return
 	}
-	local, digest, e := Download(ctx, s, a.DataDir)
+	captureDir := filepath.Join(a.DataDir, "captures")
+	if e := os.MkdirAll(captureDir, 0700); e != nil {
+		a.retryStage(id, "download", s.Profile, verdict, verifiedDigest, "", "Cannot prepare capture storage; source retained.")
+		return
+	}
+	releaseSpace, spaceErr := reserveCapture(captureDir, s.Size)
+	if spaceErr != nil {
+		_ = a.transition(id, "RETRY_PENDING", verdict, verifiedDigest, "", spaceErr.Error(), time.Minute)
+		return
+	}
+	defer releaseSpace()
+	local, digest, e := Download(ctx, s, captureDir)
 	if e != nil {
 		a.retryStage(id, "download", s.Profile, verdict, verifiedDigest, "", "Source download failed, identity changed or source is unavailable.")
 		return
@@ -306,6 +337,15 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 	action, rule := s.Profile.FilePolicy(relative, s.Size)
 	if action == "hold" || action == "ignore" {
 		_ = a.transition(id, "HELD", "NOT_SCANNED", digest, "", "Policy "+action+": "+rule, 0)
+		return
+	}
+	if action == "oversize_clean" || action == "oversize_failed" {
+		v := "OVERSIZED"
+		if action == "oversize_clean" {
+			v = "OVERSIZED_CLEAN"
+		}
+		a.Audit("scan.oversized", id, "NOT SCANNED; "+action)
+		a.routeCaptured(ctx, id, s, local, digest, v, rule, "Oversized file; NOT SCANNED; explicit profile action: "+action)
 		return
 	}
 	if action == "exclude" {
@@ -434,6 +474,7 @@ func (a *App) routeScanFailure(ctx context.Context, id string, s Snapshot, local
 // monitorProfile reads only the profile source; destinations are used only when routing.
 func (a *App) monitorProfile(ctx context.Context, p Profile) {
 	var m Mount
+	_, _ = a.DB.Exec(`UPDATE inventory SET status='ACCOUNTED',reason='Exact source version has durable job',job_id=(SELECT j.id FROM jobs j WHERE j.profile_id=inventory.profile_id AND j.key=inventory.key AND trim(j.etag,'"')=trim(inventory.etag,'"') ORDER BY j.created_at DESC LIMIT 1) WHERE profile_id=? AND status IN ('ERROR','DISCOVERED') AND EXISTS(SELECT 1 FROM jobs j WHERE j.profile_id=inventory.profile_id AND j.key=inventory.key AND trim(j.etag,'"')=trim(inventory.etag,'"'))`, p.ID)
 	summary := map[string]any{"checkedAt": stamp(), "sourceMount": p.SourceMount, "listed": 0, "queued": 0, "waitingForMarker": 0, "waitingForStability": 0, "errors": 0}
 	defer func() {
 		if b, e := a.Seal(summary); e == nil {
@@ -485,7 +526,7 @@ func (a *App) monitorProfile(ctx context.Context, p Profile) {
 			cancel()
 			if e != nil {
 				failures++
-				_, _ = a.DB.Exec("UPDATE inventory SET status='ERROR',reason='Queue admission failed' WHERE profile_id=? AND key=? AND etag=?", p.ID, f.Key, f.ETag)
+				_, _ = a.DB.Exec("UPDATE inventory SET status='ERROR',reason=? WHERE profile_id=? AND key=? AND etag=?", redactString(redactString(e.Error(), m.Secret), sasSignature(m.Secret)), p.ID, f.Key, f.ETag)
 				summary["lastError"] = redactString(redactString(e.Error(), m.Secret), sasSignature(m.Secret))
 				continue
 			}

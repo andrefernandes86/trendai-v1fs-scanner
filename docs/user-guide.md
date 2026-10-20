@@ -191,7 +191,7 @@ An old source-read failure can become **SUPERSEDED** only if a later successful 
 
 Choose **Sizing calculator**, directly after Audit log. It starts with 12,000 files/day, an 8-hour processing window, 5 MiB average / 100 GB maximum file size, a 4× arrival peak, one second per reference 5 MiB file and 2× headroom. Under those assumptions, the application-host estimate is **4 vCPU, 4 GiB RAM, 1040 GiB SSD and 4 simultaneous active files**. The disk estimate includes 90 days of 32 KiB/job history, WAL/growth allowance, temporary files and free-space reserve. It does not include remote destination storage or a separately hosted local scan engine.
 
-**The 100 GB maximum is a planning input, not an enabled scanning capability.** GB means 1 billion bytes. The application currently accepts files up to 2 GiB. Larger files require implementation and validation before scanning can be supported. The maximum size reserves temporary disk. Average size also scales projected processing time: reference seconds × max(1, average MiB ÷ reference MiB). This is an explicit linear planning assumption, not a vendor performance guarantee. CPU/RAM grow through concurrency; above 32 slots, additional hosts are required, so consult total CPU/RAM as well as per-host values. Replace the one-second example with measured download, scan, routing and verification time for representative files, especially large files.
+**The calculator does not change profile settings.** GB means 1 billion bytes. Profiles now allow original-file submission up to 100 GB, subject to scanner inspection/format limits. Configure concurrency, timeout and oversized handling in the profile. The maximum size reserves temporary disk. Average size also scales projected processing time: reference seconds × max(1, average MiB ÷ reference MiB). This is an explicit linear planning assumption, not a vendor performance guarantee. CPU/RAM grow through concurrency; above 32 slots, additional hosts are required, so consult total CPU/RAM as well as per-host values. Replace the one-second example with measured download, scan, routing and verification time for representative files, especially large files.
 
 ![Sizing calculator with transparent planning inputs](images/sizing-calculator.png)
 
@@ -202,3 +202,13 @@ These are application planning estimates, not vendor-certified requirements. Clo
 ### Vendor benchmark and calculator scope
 
 [Trend’s Containerized Scanner performance guidance](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-scaling-performance-cs), reviewed 20 October 2026, documents separate scanner-service benchmark allocations and tested file ranges. The console includes the reference figures; they do not establish 100 GB support. These scanner-service allocations are separate from this application host. The calculator’s CPU/RAM allowances and linear time projection are application planning assumptions, not Trend requirements. Replace reference time/size with representative measurements; test archive expansion, scanner quotas, transfer bandwidth and large-file limits separately.
+
+## Configure large files
+
+Open **Scan profiles → Edit profile → Large files & size policy**. Keep the default **100 GB maximum** to submit larger original files through the SDK. The app does not truncate at 2 GiB. Start with **Simultaneous large files = 1** and measure before increasing it. Set **Maximum job duration** to include capture, scan and verified routing (default six hours per attempt).
+
+Above the threshold choose **Hold at source**, **Move to scan failed**, or **Move to clean — NOT SCANNED**. Both move options apply scanned=false, verdict=not_scanned and reason=oversized; neither generates a clean verdict. Use the scan-failed destination/prefix for an oversized review folder. Test actions with a small threshold on a dedicated profile. Moved files still require verified destination bytes before source removal.
+
+An SDK verdict does not prove every byte/member was inspected. Scanner inspection/extraction limits remain applicable; no application extraction stage exists. See [customer PoC diagrams and limits](poc-architecture.md).
+
+![Configure large-file policies in the profile editor](images/profile-large-files.png)

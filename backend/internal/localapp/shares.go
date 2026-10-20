@@ -277,9 +277,6 @@ func listShare(ctx context.Context, m Mount, prefix, marker string) ([]BlobEntry
 	return out, next, nil
 }
 func downloadShare(ctx context.Context, s Snapshot, dir string) (name, digest string, err error) {
-	if s.Size > 2<<30 {
-		return "", "", errors.New("size limit exceeded")
-	}
 	fs, e := remoteOpen(ctx, s.Source)
 	if e != nil {
 		return "", "", e

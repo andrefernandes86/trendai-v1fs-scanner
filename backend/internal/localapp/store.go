@@ -63,6 +63,11 @@ type Scanner struct {
 	TLS      bool   `json:"tls"`
 }
 type Profile struct {
+	MaxScanBytes      int64  `json:"maxScanBytes"`
+	OversizeAction    string `json:"oversizeAction"`
+	LargeFileScans    int    `json:"largeFileScans"`
+	JobTimeoutSeconds int    `json:"jobTimeoutSeconds"`
+
 	Rules                     []FileRule `json:"rules"`
 	IgnorePatterns            string     `json:"ignorePatterns"`
 	QuietSeconds              int        `json:"quietSeconds"`
@@ -229,6 +234,23 @@ CREATE TABLE IF NOT EXISTS observations(profile_id TEXT NOT NULL,key TEXT NOT NU
 	if e != nil {
 		db.Close()
 		return nil, e
+	}
+	if role == "engine" {
+		captures := filepath.Join(data, "captures")
+		if e = os.MkdirAll(captures, 0700); e != nil {
+			return nil, e
+		}
+		entries, e := os.ReadDir(captures)
+		if e != nil {
+			return nil, e
+		}
+		for _, entry := range entries {
+			if entry.Type().IsRegular() {
+				if e = os.Remove(filepath.Join(captures, entry.Name())); e != nil {
+					return nil, e
+				}
+			}
+		}
 	}
 	a := &App{managementOnly: role == "api", lockFile: lock, DB: db, aead: ae, DataDir: data, WebDir: web, wake: make(chan struct{}, 1)}
 	if role != "api" {

@@ -8,6 +8,7 @@ A host-based Azure Blob, Azure Files, SMB and NFSv3 scanner with a React managem
 
 - Current host: [open the console](http://192.168.1.52:8095).
 - Administrator: [deploy, back up and upgrade](docs/operations.md#container-first-host-deployment).
+- Customer PoC: [solution diagrams, components, workflow and acceptance checklist](docs/poc-architecture.md).
 - Technical reference: [architecture](docs/architecture.md), [profile options](docs/console.md), [reliability](docs/reliability.md).
 
 ## Console workflow
@@ -17,6 +18,8 @@ A host-based Azure Blob, Azure Files, SMB and NFSv3 scanner with a React managem
 3. **Vision One config:** enter the API key. Choose **Cloud** and its region, or **Local** and the existing File Security gRPC service's `host:port`. Local TLS is configurable; certificate verification stays enabled with TLS.
 4. **Scan profiles:** create multiple profiles, each with a source connection and separate clean, malicious and scan-failed destination connections/prefixes. Set detection options and optional automatic monitoring.
 5. **Storage explorer:** browse real containers and shares, select a profile and up to 100 files, then submit scans. Follow verdicts and verified destinations in **File activity**.
+
+Profiles support original-file SDK submission up to 100 GB with a size threshold, oversized hold/unscanned routing, large-file concurrency and per-attempt timeout. See [large-file policy](docs/poc-architecture.md#large-files-and-policy). Engine inspection limits remain applicable.
 
 Source, clean, malicious and scan-failed storage must be four distinct, non-overlapping roots. Automatic monitoring scans only the source, at a per-profile interval of 10–86400 seconds (default 30). It waits for unchanged identity across checks, at least 10 seconds apart. No completion marker is required. A paused upload can still appear stable.
 

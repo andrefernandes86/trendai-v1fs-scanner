@@ -175,9 +175,6 @@ func Download(ctx context.Context, s Snapshot, dir string) (name, digest string,
 	if s.Source.Type() != "blob" {
 		return downloadShare(ctx, s, dir)
 	}
-	if s.Size > 2<<30 {
-		return "", "", errors.New("file exceeds 2 GiB host policy")
-	}
 	c, e := s.Source.BlobClient(s.Key, s.Version)
 	if e != nil {
 		return "", "", e
@@ -244,7 +241,7 @@ func Route(ctx context.Context, m Mount, key, path, digest, job, verdict string,
 		return e
 	}
 	defer f.Close()
-	_, e = target.UploadFile(ctx, f, &blockblob.UploadFileOptions{AccessConditions: &blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETag("*"))}}, Metadata: map[string]*string{"job": &job, "sha256": &digest, "verdict": &verdict}})
+	_, e = target.UploadFile(ctx, f, &blockblob.UploadFileOptions{BlockSize: 8 << 20, Concurrency: 2, AccessConditions: &blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETag("*"))}}, Metadata: map[string]*string{"job": &job, "sha256": &digest, "verdict": &verdict}})
 	if e != nil {
 		var re *azcore.ResponseError
 		if !errors.As(e, &re) || re.StatusCode != 412 {
@@ -320,7 +317,7 @@ func (a *App) ScanDirect(ctx context.Context, path string, s Scanner, p Profile)
 		}
 	}
 	defer a.scanMu.Unlock()
-	names := []string{"TM_AM_SERVER_ADDR", "TM_AM_DISABLE_TLS", "TM_AM_DISABLE_CERT_VERIFY", "TM_AM_AUTH_KEY_NOT_REQUIRED", "TM_AM_AUTH_KEY"}
+	names := []string{"TM_AM_SERVER_ADDR", "TM_AM_DISABLE_TLS", "TM_AM_DISABLE_CERT_VERIFY", "TM_AM_AUTH_KEY_NOT_REQUIRED", "TM_AM_AUTH_KEY", "TM_AM_SCAN_TIMEOUT_SECS"}
 	old := map[string]*string{}
 	for _, n := range names {
 		if v, ok := os.LookupEnv(n); ok {
@@ -338,6 +335,7 @@ func (a *App) ScanDirect(ctx context.Context, path string, s Scanner, p Profile)
 			}
 		}
 	}()
+	os.Setenv("TM_AM_SCAN_TIMEOUT_SECS", fmt.Sprint(int(p.JobTimeout().Seconds())))
 	region := s.Region
 	if s.Type == "local" {
 		region = "us-east-1"

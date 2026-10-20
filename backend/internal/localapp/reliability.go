@@ -124,12 +124,7 @@ func (a *App) verifyDestination(ctx context.Context, m *MoveRecord) error {
 	if m.DestinationETag != "" && m.DestinationETag != s.ETag {
 		return errors.New("destination identity changed after verification")
 	}
-	local, _, e := Download(ctx, s, a.DataDir)
-	if e != nil {
-		return e
-	}
-	defer os.Remove(local)
-	sha, crc, n, e := checksums(local)
+	sha, crc, n, e := streamChecksums(ctx, s)
 	if e != nil {
 		return e
 	}
@@ -217,7 +212,7 @@ func (a *App) routeCaptured(ctx context.Context, id string, s Snapshot, local, d
 		return
 	}
 	target := s.Failed
-	if verdict == "CLEAN" || verdict == "EXCLUDED" {
+	if verdict == "CLEAN" || verdict == "EXCLUDED" || verdict == "OVERSIZED_CLEAN" {
 		target = s.Good
 	}
 	if verdict == "MALICIOUS" {

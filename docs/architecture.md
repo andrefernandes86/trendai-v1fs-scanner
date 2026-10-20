@@ -1,5 +1,7 @@
 # Architecture
 
+See [customer PoC architecture](poc-architecture.md) for downloadable diagrams, all components and a demonstration checklist.
+
 A supervised container runs independent management and processing services. The React console is served by the management API. Discovery, the durable queue and file routing run in a separate engine process. Each SDK request runs in a short-lived child process so cloud/local endpoint environment settings cannot mix between concurrent scans.
 
 ```mermaid
@@ -48,3 +50,7 @@ Pending scans counts QUEUED/RETRY_PENDING jobs awaiting scanning with UNKNOWN ve
 `/livez` reports management/database liveness and includes independently reported engine status. The engine publishes progress every second; stale or unhealthy engine health triggers its own watchdog restart. Container `-healthcheck` requires both services. Storage/scanner outages use processing retries rather than liveness restart loops. Overview exposes engine state and worker capacity so operators can inspect a recovering engine while the console remains available.
 
 CSV covers full history; the UI provides filtered pagination. Detection details are encrypted separately, with recorded malware names/engines exposed in authenticated record details. Credentials and raw snapshots are never exported. External notifications remain deferred.
+
+## Large-file execution
+
+See [large-file controls](poc-architecture.md#large-files-and-policy). Worker heartbeats continue during long attempts, bounded by the job deadline; a worker stuck after its deadline eventually loses its heartbeat and triggers recovery. Child/SDK timeouts follow profile duration. Exact source-version inventory rows link to existing durable jobs to reconcile historical admission errors without changing scan results.

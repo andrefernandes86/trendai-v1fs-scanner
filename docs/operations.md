@@ -67,3 +67,15 @@ The watchdog uses 20 seconds of startup grace, 5-second checks and 3 failed chec
 Share sources need read, rename, mkdir and delete rights inside their source root. Reserve `.v1fs-claims` for the scanner account. Do not treat claimed files as lost: their original and private paths appear in record details and persist across restarts. Never manually clear claims while jobs are active. Customer load/scale validation is run separately by the customer.
 
 Management `/livez` returns the API/database result with a separate engine field; it remains available during engine recovery. The Docker healthcheck requires both services. The engine publishes its progress heartbeat every second, with a 15-second freshness limit. Each service restarts independently; never delete queue/transfer evidence to recover a service. Use `docker compose logs` to distinguish `-serve` and `-engine` child PIDs. The browser prevents overlapping automatic refresh batches, and indexed history/read connections keep normal management reads independent of engine writes.
+
+## Large files
+
+The old 2 GiB application cap is removed. Profiles default to 100 GB original-file SDK submission, one concurrent file at least 1 GB and a six-hour per-attempt deadline. See [profile controls and resource behavior](poc-architecture.md#large-files-and-policy). The scanner may inspect selected ranges and impose format/extraction limits; successful submission is not proof of exhaustive byte/member coverage.
+
+Use a persistent data disk with space for simultaneous captures, history and operational reserve. Capacity admission retains 5 GiB and defers capture when insufficient. The implementation conservatively also counts outstanding reservations, so it may wait before physically exhausting disk. Oversized routing still needs room to capture that file; changing the policy does not provision disk. A host with 170 GiB free cannot process two simultaneous 100 GB captures. Configure the large-file cap accordingly.
+
+On engine restart, only its private captures directory is cleaned; scans re-download interrupted sources. Source and verified move records remain durable. Do not put customer uploads/backups in the engine-owned captures directory. An interruption during a large download can therefore incur another transfer; budget network/retry time accordingly.
+
+The processing-deadline alert is separate from the maximum job duration. Set the alert high enough for expected large-file work while keeping a bounded per-attempt timeout. Disk shortage waits do not consume the scan attempt budget. Existing held/retry jobs retain their captured policy; new size-policy changes apply to newly queued work.
+
+To investigate a file: search its name in File activity, inspect state, attempts, scan response and destination evidence. SCANNING includes source capture before SDK invocation. A terminal record and verified destination, rather than disappearance from the source alone, are the completion evidence.

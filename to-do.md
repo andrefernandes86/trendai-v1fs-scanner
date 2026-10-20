@@ -46,4 +46,6 @@ Polling cannot detect files removed before observation. Paused uploads can appea
 
 Watchdog fault tests cover abrupt child termination and a completely stopped/unresponsive child process. External notification code is unchanged.
 
-- [ ] Enable and validate files above the current 2 GiB runtime limit before accepting up to 100 GB: scanner capability, bounded-memory streaming, temporary disk, transfer timeouts, verification and retry/soak coverage. The sizing calculator already supports 100 GB planning.
+- [x] Remove 2 GiB application rejection; up to 100 GB SDK submission, profile size/oversize policy, streaming verification, disk admission, long-job timeouts and large-file concurrency.
+- [ ] Full 100 GB end-to-end and customer-scale throughput/soak validation; distinguish engine inspection limits from submission capability.
+- [ ] Optional archive extraction: proposal only, implementation not authorized. Isolated ZIP/TAR-GZIP workers, strict expansion/path/time budgets, per-entry evidence; incomplete extraction never clean.
