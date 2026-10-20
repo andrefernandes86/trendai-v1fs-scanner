@@ -24,3 +24,7 @@ New scans retain an encrypted scanner response. Record details show malware name
 Exclusion controls are backlog items, not current console options. The proposed workflow is to define per-profile path/filename rules, preview matches, then save a versioned policy. A match would promote to clean storage with an EXCLUDED / NOT SCANNED label, not a clean scan verdict. The transfer would still require content verification before source deletion. Broad rules can bypass malware detection and must be visible in activity/export.
 
 The proposed move-verification controls will show source/destination size, SHA-256, CRC32C and source-delete state. At present, routing already verifies size and SHA-256; supplemental CRC32C and durable independent deletion recovery remain pending.
+
+## Reliability settings
+
+Profile sections 6–8 configure quiet periods/temporary ignores, retries, exclusions/hold rules and isolated-file recovery. Preview exclusion matches before saving. Share deletion requires confirming the producer handoff and controlled destination-writer contract. Overview exposes processing alerts and inventory export; File activity provides date/verdict filters, pages and explicit retention preview/apply. Record details show integrity evidence and manual recovery/enrichment actions. See [reliability](reliability.md) for operational semantics.

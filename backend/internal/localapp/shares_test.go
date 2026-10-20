@@ -108,7 +108,7 @@ func TestShareBrowsingDownloadAndAtomicRouting(t *testing.T) {
 			if e != nil || len(files) != 1 || !files[0].Complete {
 				t.Fatalf("list %v %#v", e, files)
 			}
-			s := Snapshot{Source: m, Good: Mount{ID: "good", Kind: kind, Server: "nas", Share: "good", Export: "/good"}, Bad: Mount{ID: "bad", Kind: kind, Server: "nas", Share: "bad", Export: "/bad"}, Profile: Profile{ID: "profile-" + kind, Name: "Profile", Revision: 1}, Key: files[0].Key, ETag: files[0].ETag, Size: files[0].Size}
+			s := Snapshot{Source: m, Good: Mount{ID: "good", Kind: kind, Server: "nas", Share: "good", Export: "/good"}, Bad: Mount{ID: "bad", Kind: kind, Server: "nas", Share: "bad", Export: "/bad"}, Profile: Profile{ControlledWriter: true, ID: "profile-" + kind, Name: "Profile", Revision: 1}, Key: files[0].Key, ETag: files[0].ETag, Size: files[0].Size}
 			id, e := a.insertJob(s)
 			if e != nil {
 				t.Fatal(e)
@@ -299,7 +299,7 @@ func TestShareListingPaginationDoesNotSkipSiblingFiles(t *testing.T) {
 
 func TestLegacyBlobIdentityIsPreserved(t *testing.T) {
 	a := testApp(t)
-	s := Snapshot{Source: Mount{ID: "source", Account: "acct", Container: "incoming"}, Profile: Profile{ID: "policy", Revision: 2}, Key: "file.txt", ETag: "etag", Version: "v1"}
+	s := Snapshot{Source: Mount{ID: "source", Account: "acct", Container: "incoming"}, Profile: Profile{ControlledWriter: true, ID: "policy", Revision: 2}, Key: "file.txt", ETag: "etag", Version: "v1"}
 	legacy, _ := json.Marshal([]any{s.Profile.ID, s.Profile.Revision, s.Source.Account, s.Source.Container, s.Key, s.ETag, s.Version})
 	h := sha256.Sum256(legacy)
 	id, e := a.insertJob(s)

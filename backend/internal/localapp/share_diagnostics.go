@@ -32,7 +32,7 @@ func smbShares(ctx context.Context, m Mount) ([]string, error) {
 		conn.SetDeadline(time.Now().Add(30 * time.Second))
 	}
 	d := smb.Dialer{Negotiator: smb.Negotiator{RequireMessageSigning: true}, Initiator: &smb.NTLMInitiator{User: m.Username, Password: m.Secret, Domain: m.Domain}}
-	session, e := d.DialContext(ctx, conn)
+	session, e := d.DialContext(ctx, &smbDiscoveryConn{Conn: conn, server: m.Server})
 	if e != nil {
 		return nil, e
 	}
@@ -176,6 +176,9 @@ func (a *App) shareStorageTest(w http.ResponseWriter, r *http.Request, kind stri
 			response["error"] = capture.clean(e.Error())
 		} else {
 			response["error"] = redactString(e.Error(), m.Secret)
+			if m.Type() == "smb" && kind == "containers" {
+				response["guidance"] = "Server share enumeration requires IPC$/SRVSVC permissions. A known share can still be entered and tested directly; listing is not required to save it."
+			}
 		}
 	}
 	a.Audit("storage.test_"+m.Type(), m.ID, func() string {
@@ -191,3 +194,16 @@ func sasSignature(s string) string {
 	q, _ := url.ParseQuery(strings.TrimPrefix(s, "?"))
 	return q.Get("sig")
 }
+
+// SRVSVC expects a server name, not the TCP peer string containing :445.
+type smbDiscoveryAddr string
+
+func (a smbDiscoveryAddr) Network() string { return "tcp" }
+func (a smbDiscoveryAddr) String() string  { return string(a) }
+
+type smbDiscoveryConn struct {
+	net.Conn
+	server string
+}
+
+func (c *smbDiscoveryConn) RemoteAddr() net.Addr { return smbDiscoveryAddr(c.server) }

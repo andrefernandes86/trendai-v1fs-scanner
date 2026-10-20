@@ -75,6 +75,11 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/storage/test", a.storageTest)
 	mux.HandleFunc("GET /api/mounts/{id}/blobs", a.blobs)
 	mux.HandleFunc("GET /api/mounts/{id}/files", a.blobs)
+	mux.HandleFunc("POST /api/profiles/preview", a.previewPolicy)
+	mux.HandleFunc("POST /api/jobs/{id}/recover", a.recoverHTTP)
+	mux.HandleFunc("GET /api/inventory/export.csv", a.inventoryCSV)
+	mux.HandleFunc("GET /api/assurance", a.assurance)
+	mux.HandleFunc("POST /api/maintenance/retention", a.retention)
 	mux.HandleFunc("GET /api/profiles", a.profiles)
 	mux.HandleFunc("POST /api/profiles/{id}/test-file", a.profileTestFile)
 	mux.HandleFunc("PUT /api/profiles/{id}", a.profileSave)
@@ -87,7 +92,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/jobs/export.csv", a.exportJobsCSV)
 	mux.HandleFunc("GET /api/statistics", a.statistics)
 	mux.HandleFunc("GET /api/jobs", func(w http.ResponseWriter, r *http.Request) {
-		j, e := a.Jobs()
+		j, e := a.queryJobs(r)
 		if e != nil {
 			problem(w, 500, "Could not read jobs.")
 			return
@@ -322,6 +327,10 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 		problem(w, 400, "Scan frequency must be between 10 and 86400 seconds.")
 		return
 	}
+	if e := p.ReliabilityValidate(); e != nil {
+		problem(w, 400, e.Error())
+		return
+	}
 	for _, verdict := range []string{"CLEAN", "MALICIOUS"} {
 		if _, err := p.ResultTags(verdict); err != nil {
 			problem(w, 400, err.Error())
@@ -427,6 +436,12 @@ func (a *App) scan(w http.ResponseWriter, r *http.Request) {
 	respond(w, 202, map[string]any{"queued": ids})
 }
 func (a *App) retryJob(w http.ResponseWriter, r *http.Request) {
+	var currentState string
+	if a.DB.QueryRow("SELECT state FROM jobs WHERE id=?", r.PathValue("id")).Scan(&currentState) != nil || (currentState != "HELD" && currentState != "RETRY_PENDING") {
+		problem(w, 409, "Only held/retrying jobs can be retried.")
+		return
+	}
+	_, _ = a.DB.Exec("DELETE FROM stage_attempts WHERE job_id=?", r.PathValue("id"))
 	res, e := a.DB.Exec("UPDATE jobs SET state='QUEUED',attempts=0,error='',available_at=?,updated_at=? WHERE id=? AND state IN ('HELD','RETRY_PENDING')", time.Now().Unix(), stamp(), r.PathValue("id"))
 	if e != nil {
 		problem(w, 500, "Retry failed.")

@@ -49,6 +49,12 @@ See [architecture](docs/architecture.md) and [operations](docs/operations.md).
 
 The product comprises a React console, a Go API/scheduler, a durable SQLite job queue, direct storage connectors and the official Vision One scanning SDK. Profiles discover only their source, capture stable file versions, scan them, route by verdict, verify destination size/SHA-256, then attempt removal of the unchanged source. Unknown results remain isolated for review. See [architecture](docs/architecture.md) for components, state and trust boundaries, [console usage](docs/console.md) for setup and operation, and [operations](docs/operations.md#deploy-on-the-current-host) for exact deployment paths and commands for the current host.
 
-## Planned reliability and exclusion features
+## Reliability controls (implemented)
 
-The [backlog](to-do.md) now includes inventory reconciliation, independent scan/transfer/delete retries, failed-file recovery, monitoring alerts and crash-safe move reconciliation. It also specifies **exclusion rules** that would send matching files to clean storage as **EXCLUDED / NOT SCANNED**, plus stronger **verified-copy then conditional-delete** handling with supplemental CRC32C and SHA-256. These are planned enhancements, not existing settings. CRC does not replace SHA-256 or prove upload completion. Do not promise that no file can be missed until reconciliation, recovery and fault tests are implemented and validated.
+Profiles now expose quiet periods, temporary ignore patterns, exclusion/hold rules with preview, independent scan/transfer/delete retry limits, recovery intervals/budgets and processing deadlines. Exclusions reach clean storage as EXCLUDED / NOT SCANNED. Full source-version inventory, assurance alerts, filtered/paginated history and previewed retention make unresolved work visible.
+
+Verified moves persist CRC32C and SHA-256 evidence before source deletion. Blob finalization holds a renewable destination lease and conditionally deletes the captured source ETag. Shares require an explicit controlled-writer handoff contract; absent that confirmation the source is retained. Failed-file recovery and historical detection enrichment operate on recorded destination bytes, with linked audit history.
+
+Read the [reliability guide](docs/reliability.md) for retry defaults, recovery semantics, integrity phases and limitations. Install the [systemd service](deploy/install-systemd.sh) as an administrator for reboot persistence. The application cannot guarantee files that disappear between polls, enforce third-party writer behavior, or deliver external alerts without a configured monitoring destination.
+
+Run browser checks against an isolated instance with `PLAYWRIGHT_BROWSERS_PATH=/tmp/trendai-browsers npm run test:e2e --prefix web` after installing Playwright Chromium. Default E2E URL is port 18096; override with E2E_BASE_URL. Never point these setup/configuration tests at production data.

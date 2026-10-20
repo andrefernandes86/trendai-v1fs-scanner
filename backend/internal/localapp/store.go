@@ -56,6 +56,19 @@ type Scanner struct {
 	TLS      bool   `json:"tls"`
 }
 type Profile struct {
+	Rules                     []FileRule `json:"rules"`
+	IgnorePatterns            string     `json:"ignorePatterns"`
+	QuietSeconds              int        `json:"quietSeconds"`
+	ScanAttempts              int        `json:"scanAttempts"`
+	TransferAttempts          int        `json:"transferAttempts"`
+	DeleteAttempts            int        `json:"deleteAttempts"`
+	RetryBaseSeconds          int        `json:"retryBaseSeconds"`
+	RecoveryEnabled           bool       `json:"recoveryEnabled"`
+	RecoverySeconds           int        `json:"recoverySeconds"`
+	RecoveryAttempts          int        `json:"recoveryAttempts"`
+	ControlledWriter          bool       `json:"controlledWriter"`
+	ProcessingDeadlineSeconds int        `json:"processingDeadlineSeconds"`
+
 	FailedMount         string `json:"failedMount"`
 	FailedPrefix        string `json:"failedPrefix"`
 	ScanIntervalSeconds int    `json:"scanIntervalSeconds"`
@@ -90,25 +103,27 @@ type Snapshot struct {
 	Size               int64
 }
 type Job struct {
-	NewerCompletedJobID  string      `json:"newerCompletedJobId,omitempty"`
-	Detections           []Detection `json:"detections"`
-	ScanResponseRecorded bool        `json:"scanResponseRecorded"`
-	ID                   string      `json:"id"`
-	Key                  string      `json:"key"`
-	ProfileID            string      `json:"profileId"`
-	ProfileName          string      `json:"profileName"`
-	SourceID             string      `json:"sourceId"`
-	ETag                 string      `json:"etag"`
-	Version              string      `json:"version"`
-	Size                 int64       `json:"size"`
-	State                string      `json:"state"`
-	Verdict              string      `json:"verdict"`
-	Digest               string      `json:"digest"`
-	Destination          string      `json:"destination"`
-	Error                string      `json:"error"`
-	Attempts             int         `json:"attempts"`
-	CreatedAt            string      `json:"createdAt"`
-	UpdatedAt            string      `json:"updatedAt"`
+	Integrity            map[string]any `json:"integrity,omitempty"`
+	StageAttempts        map[string]int `json:"stageAttempts,omitempty"`
+	NewerCompletedJobID  string         `json:"newerCompletedJobId,omitempty"`
+	Detections           []Detection    `json:"detections"`
+	ScanResponseRecorded bool           `json:"scanResponseRecorded"`
+	ID                   string         `json:"id"`
+	Key                  string         `json:"key"`
+	ProfileID            string         `json:"profileId"`
+	ProfileName          string         `json:"profileName"`
+	SourceID             string         `json:"sourceId"`
+	ETag                 string         `json:"etag"`
+	Version              string         `json:"version"`
+	Size                 int64          `json:"size"`
+	State                string         `json:"state"`
+	Verdict              string         `json:"verdict"`
+	Digest               string         `json:"digest"`
+	Destination          string         `json:"destination"`
+	Error                string         `json:"error"`
+	Attempts             int            `json:"attempts"`
+	CreatedAt            string         `json:"createdAt"`
+	UpdatedAt            string         `json:"updatedAt"`
 }
 
 func Open(data, web string) (*App, error) {
@@ -168,6 +183,11 @@ func Open(data, web string) (*App, error) {
 	_, e = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
 CREATE TABLE IF NOT EXISTS config(kind TEXT NOT NULL,id TEXT NOT NULL,value BLOB NOT NULL,PRIMARY KEY(kind,id));
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS stage_attempts(job_id TEXT NOT NULL,stage TEXT NOT NULL,attempts INTEGER NOT NULL,PRIMARY KEY(job_id,stage));
+CREATE TABLE IF NOT EXISTS move_records(job_id TEXT PRIMARY KEY,payload BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS inventory(profile_id TEXT NOT NULL,key TEXT NOT NULL,etag TEXT NOT NULL,size INTEGER NOT NULL,last_seen TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',job_id TEXT NOT NULL DEFAULT '',PRIMARY KEY(profile_id,key,etag));
+CREATE INDEX IF NOT EXISTS inventory_seen ON inventory(last_seen,status);
+CREATE TABLE IF NOT EXISTS recovery_links(parent_id TEXT NOT NULL,child_id TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,PRIMARY KEY(parent_id,child_id));
 CREATE TABLE IF NOT EXISTS scan_details(job_id TEXT PRIMARY KEY,payload BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS scan_results(job_id TEXT PRIMARY KEY, scanned_at TEXT NOT NULL, verdict TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,key TEXT NOT NULL,profile_id TEXT NOT NULL,profile_name TEXT NOT NULL,source_id TEXT NOT NULL,etag TEXT NOT NULL,version TEXT NOT NULL,size INTEGER NOT NULL,state TEXT NOT NULL,verdict TEXT NOT NULL DEFAULT 'UNKNOWN',digest TEXT NOT NULL DEFAULT '',destination TEXT NOT NULL DEFAULT '',error TEXT NOT NULL DEFAULT '',attempts INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,available_at INTEGER NOT NULL,snapshot BLOB NOT NULL);

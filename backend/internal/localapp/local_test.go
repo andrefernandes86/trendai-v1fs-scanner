@@ -172,7 +172,10 @@ func (f *fakeAzure) Do(r *http.Request) (*http.Response, error) {
 	key := r.URL.Path
 	status := 200
 	var b []byte
-	if r.Method == "DELETE" {
+	if r.Method == "PUT" && r.URL.Query().Get("comp") == "lease" {
+		status = 201
+		h.Set("x-ms-lease-id", r.Header.Get("x-ms-proposed-lease-id"))
+	} else if r.Method == "DELETE" {
 		status = 202
 	} else if r.Method == "PUT" && r.URL.Query().Get("comp") == "tags" {
 		status = 204
@@ -207,7 +210,7 @@ func TestRealStorageAdapterRoutingAndRecovery(t *testing.T) {
 	storageTransport = fake
 	t.Cleanup(func() { storageTransport = nil })
 	source, good, bad := testMount("source", "incoming"), testMount("good", "clean"), testMount("bad", "quarantine")
-	base := Snapshot{Source: source, Good: good, Bad: bad, Failed: testMount("failed", "scan-failed"), Scanner: Scanner{Type: "local", Address: "scanner:50051"}, Profile: Profile{ID: "policy", Name: "Policy", Revision: 1, GoodPrefix: "approved", BadPrefix: "blocked"}, Key: "report.txt", ETag: `"v1"`, Size: 12}
+	base := Snapshot{Source: source, Good: good, Bad: bad, Failed: testMount("failed", "scan-failed"), Scanner: Scanner{Type: "local", Address: "scanner:50051"}, Profile: Profile{ID: "policy", Name: "Policy", Revision: 1, ScanAttempts: 1, GoodPrefix: "approved", BadPrefix: "blocked"}, Key: "report.txt", ETag: `"v1"`, Size: 12}
 	for _, tc := range []struct{ name, raw, state, container string }{{"clean", `{"scanId":"test","scanResult":0}`, "COMPLETED", "/clean/"}, {"malicious", `{"scanId":"test","scanResult":1}`, "QUARANTINED", "/quarantine/"}, {"unknown", `{}`, "HELD", "/scan-failed/"}} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := base

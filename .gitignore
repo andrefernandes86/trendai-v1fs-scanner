@@ -12,3 +12,6 @@ data/
 *.db-wal
 master.key
 instance.lock
+
+test-results/
+playwright-report/

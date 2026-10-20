@@ -17,11 +17,11 @@ The current manual foreground host process is not a reboot-persistent service. D
 - Unknown result: inspect File activity. Unknown files route to scan-failed and remain HELD for review, never clean.
 - Transfer failure: verify destination read/write/tag permissions and staging support. Source is retained until verified transfer.
 - Source deletion failure: verify delete permission and whether the file changed. The record retains its verified destination.
-- SMB List shares failure with Test share success: share enumeration uses server RPC/IPC permissions and may be blocked independently of direct share access; improved diagnostics/fallback remains pending.
+- SMB List shares failure with Test share success: share enumeration uses server RPC/IPC permissions and may be blocked independently of direct share access; discovery now strips the TCP port from the SRVSVC server name and explains enumeration permission failures.
 
 Generated safe/EICAR test files enter the configured source and use the real monitor/scanner/routing pipeline. EICAR is a standard antivirus test pattern and is never executed. Diagnostic scanner buttons operate separately from routing. Test requests and responses redact credentials.
 
-Existing unknown files created before the verbose TrendX parsing fix are historical results. Re-upload a copy to the source to scan under the fixed logic; a dedicated failed-file reprocessing UI is pending. Do not label old unknown records clean without rescanning their exact bytes.
+Existing unknown files created before the verbose TrendX parsing fix are historical results. Re-upload a copy to the source to scan under the fixed logic; record details now offer explicit failed-file recovery. Do not label old unknown records clean without rescanning their exact bytes.
 
 ## Deploy on the current host
 
@@ -55,4 +55,22 @@ PORT=8095 ./work/trendai-v1fs-local
 
 Verify `/healthz`, sign in, confirm the last source check advances, and run a benign test file through a profile to verify a real CLEAN result, destination checksum verification and source removal. An HTTP health response alone does not prove the scanner or storage credentials work. Use EICAR separately to verify malicious routing. Check the job and audit records for deletion errors. Retain a rollback binary and a consistent database/key backup; do not assume database migrations are automatically reversible.
 
-This is a foreground deployment; its lifetime depends on the terminal/process supervisor. A supported reboot-persistent service remains a backlog item. Do not create a second instance against the same data directory. Never copy runtime credentials or databases into GitHub.
+This is a foreground deployment; its lifetime depends on the terminal/process supervisor. A restricted systemd service and root installer are provided in deploy/. Activate them on the host as administrator. Do not create a second instance against the same data directory. Never copy runtime credentials or databases into GitHub.
+
+## Persistent service and rollback
+
+From the repository root, after building and backing up data/key:
+
+```bash
+sudo APP_USER=skynet deploy/install-systemd.sh
+# Stop the existing foreground process first to release the single-instance lock.
+sudo systemctl start trendai-v1fs-scanner
+sudo systemctl status trendai-v1fs-scanner
+sudo journalctl -u trendai-v1fs-scanner -n 100
+```
+
+The installer enables startup at boot but does not kill a foreground instance. Service activation requires real host administrator privileges; this sandbox cannot activate it. Source credentials need delete permission; Blob destinations additionally need lease/tag permissions. For share handoff, producers must stop modifying a transferred file and destination writers must be controlled.
+
+For rollback, stop the service, restore the previous binary/frontend together and restore a coordinated data/key backup if a schema downgrade is needed, then restart and run health plus safe/EICAR end-to-end checks. Preserve the current failed state for investigation rather than overwriting your only backup.
+
+See [reliability](reliability.md) for stage budgets, CRC32C evidence, independent source-delete retries, reconciliation, recovery, retention and alert delivery prerequisites.

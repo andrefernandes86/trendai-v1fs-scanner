@@ -33,3 +33,7 @@ A planned exclusion policy will match explicit paths/patterns and route matching
 The planned durable move protocol captures source identity, size, SHA-256 and CRC32C, publishes without overwriting another file, reads the final destination back and compares all checksums, then persists DESTINATION_VERIFIED before attempting a conditional source delete. CRC32C detects accidental corruption; SHA-256 remains the stronger content identity check. A filename, existence check or ETag alone is insufficient. Destination identity must remain protected between verification and source deletion. Source deletion has independent retry/reconciliation state, including recovery after a crash when the source is already absent.
 
 Blob supports conditional identity checks; SMB/NFS require an explicit handoff/ownership contract to close the check/unlink race against concurrent producers. Until that contract exists, ordinary identity/digest checks have a documented race limitation. Source replacements must remain intact and become a separately tracked version.
+
+## Durable reliability workflow
+
+The implemented state, integrity, reconciliation, recovery, exclusion and retry design is described in [reliability](reliability.md). Move records and retained scanner responses are encrypted. Console integrity summaries omit connection credentials. Source-version inventory and recovery links retain accounting across repeated listing and reprocessing.

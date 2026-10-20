@@ -10,6 +10,7 @@ import (
 	"github.com/andrefernandes86/trendai-v1fs-scanner/internal/core"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -129,8 +130,11 @@ func (a *App) insertJob(s Snapshot) (string, error) {
 	}
 	return id, nil
 }
-func (a *App) Jobs() ([]Job, error) {
-	rows, e := a.DB.Query("SELECT j.id,j.key,j.profile_id,j.profile_name,j.source_id,j.etag,j.version,j.size,j.state,j.verdict,j.digest,j.destination,j.error,j.attempts,j.created_at,j.updated_at,COALESCE(d.payload,X''),COALESCE((SELECT n.id FROM jobs n WHERE n.source_id=j.source_id AND n.key=j.key AND n.profile_id=j.profile_id AND n.created_at>j.created_at AND n.state IN ('COMPLETED','QUARANTINED') ORDER BY n.created_at DESC LIMIT 1),'') FROM jobs j LEFT JOIN scan_details d ON d.job_id=j.id ORDER BY j.created_at DESC LIMIT 500")
+func (a *App) Jobs() ([]Job, error) { return a.jobsPage("", nil, 500, 0) }
+func (a *App) jobsPage(where string, args []any, limit, offset int) ([]Job, error) {
+	query := "SELECT j.id,j.key,j.profile_id,j.profile_name,j.source_id,j.etag,j.version,j.size,j.state,j.verdict,j.digest,j.destination,j.error,j.attempts,j.created_at,j.updated_at,COALESCE(d.payload,X''),COALESCE(m.payload,X''),COALESCE((SELECT json_group_object(stage,attempts) FROM stage_attempts WHERE job_id=j.id),'{}'),COALESCE((SELECT n.id FROM jobs n WHERE n.source_id=j.source_id AND n.key=j.key AND n.profile_id=j.profile_id AND n.created_at>j.created_at AND n.state IN ('COMPLETED','QUARANTINED') ORDER BY n.created_at DESC LIMIT 1),'') FROM jobs j LEFT JOIN scan_details d ON d.job_id=j.id LEFT JOIN move_records m ON m.job_id=j.id" + where + " ORDER BY j.created_at DESC,j.id DESC LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+	rows, e := a.DB.Query(query, args...)
 	if e != nil {
 		return nil, e
 	}
@@ -138,10 +142,18 @@ func (a *App) Jobs() ([]Job, error) {
 	out := []Job{}
 	for rows.Next() {
 		var j Job
-		var details []byte
-		if e = rows.Scan(&j.ID, &j.Key, &j.ProfileID, &j.ProfileName, &j.SourceID, &j.ETag, &j.Version, &j.Size, &j.State, &j.Verdict, &j.Digest, &j.Destination, &j.Error, &j.Attempts, &j.CreatedAt, &j.UpdatedAt, &details, &j.NewerCompletedJobID); e != nil {
+		var details, moveBytes []byte
+		var stages string
+		if e = rows.Scan(&j.ID, &j.Key, &j.ProfileID, &j.ProfileName, &j.SourceID, &j.ETag, &j.Version, &j.Size, &j.State, &j.Verdict, &j.Digest, &j.Destination, &j.Error, &j.Attempts, &j.CreatedAt, &j.UpdatedAt, &details, &moveBytes, &stages, &j.NewerCompletedJobID); e != nil {
 			return nil, e
 		}
+		if len(moveBytes) > 0 {
+			var m MoveRecord
+			if a.Unseal(moveBytes, &m) == nil {
+				j.Integrity = publicMove(m)
+			}
+		}
+		_ = json.Unmarshal([]byte(stages), &j.StageAttempts)
 		j.Detections = []Detection{}
 		if len(details) > 0 {
 			var d ScanDetails
@@ -219,88 +231,108 @@ func (a *App) worker(ctx context.Context) {
 func (a *App) process(parent context.Context, id string, s Snapshot, attempt int) {
 	ctx, cancel := context.WithTimeout(parent, 10*time.Minute)
 	defer cancel()
+	if move, e := a.loadMove(id); e == nil {
+		if move.Phase == "COMPLETED" {
+			_ = a.transition(id, move.FinalState, move.Verdict, move.Digest, move.Destination, move.Reason, 0)
+			return
+		}
+		a.finalizeMove(ctx, id, s, move)
+		return
+	}
 	verdict, verifiedDigest := "UNKNOWN", ""
 	if e := a.DB.QueryRow("SELECT verdict,digest FROM jobs WHERE id=?", id).Scan(&verdict, &verifiedDigest); e != nil {
 		return
 	}
-	fail := func(message string) {
-		state := "RETRY_PENDING"
-		if attempt >= 5 {
-			state = "HELD"
-		}
-		_ = a.transition(id, state, verdict, verifiedDigest, "", message, time.Duration(1<<min(attempt, 8))*10*time.Second)
-	}
-	path, digest, e := Download(ctx, s, a.DataDir)
+	local, digest, e := Download(ctx, s, a.DataDir)
 	if e != nil {
-		fail("Source download failed or source identity changed. Check Azure credentials, permissions, and upload completion.")
+		a.retryStage(id, "download", s.Profile, verdict, verifiedDigest, "", "Source download failed, identity changed or source is unavailable.")
 		return
 	}
-	defer os.Remove(path)
+	defer os.Remove(local)
+	if verifiedDigest != "" && verifiedDigest != digest {
+		_ = a.transition(id, "HELD", "UNKNOWN", digest, "", "Source differs from previously captured bytes.", 0)
+		return
+	}
+	relative := strings.TrimPrefix(s.Key, s.Source.Prefix+s.Profile.Prefix)
+	action, rule := s.Profile.FilePolicy(relative, s.Size)
+	if action == "hold" || action == "ignore" {
+		_ = a.transition(id, "HELD", "NOT_SCANNED", digest, "", "Policy "+action+": "+rule, 0)
+		return
+	}
+	if action == "exclude" {
+		a.Audit("scan.excluded", id, "Rule "+rule+"; profile revision "+fmt.Sprint(s.Profile.Revision))
+		a.routeCaptured(ctx, id, s, local, digest, "EXCLUDED", rule, "Excluded by policy; NOT SCANNED. Rule: "+rule)
+		return
+	}
 	if verifiedDigest != "" && (verdict == "CLEAN" || verdict == "MALICIOUS") {
-		if digest != verifiedDigest {
-			_ = a.transition(id, "HELD", "UNKNOWN", digest, "", "Content differs from previously scanned bytes.", 0)
-			return
-		}
-	} else if verifiedDigest != "" && verdict == "UNKNOWN" {
-		var recorded string
-		if a.DB.QueryRow("SELECT verdict FROM scan_results WHERE job_id=?", id).Scan(&recorded) == nil && recorded == "UNKNOWN" {
-			a.routeScanFailure(ctx, id, s, path, digest, "Scanner returned an unverified result. Manual review required.")
-			return
-		}
-		a.routeScanFailure(ctx, id, s, path, digest, "Scanner failed after retries. Manual review required.")
-		return
-	} else {
-		raw, scanErr := a.Scan(ctx, path, s.Scanner, s.Profile)
-		if scanErr != nil {
-			if attempt >= 5 {
-				a.routeScanFailure(ctx, id, s, path, digest, "Scanner failed after retries. Manual review required.")
-			} else {
-				fail("Scanner request failed. Check the API key, cloud region or local address, TLS, and connectivity.")
-			}
-			return
-		}
-		if err := a.recordScanDetails(id, raw, s.Scanner.APIKey); err != nil {
-			fail("Could not retain scanner details.")
-			return
-		}
-		verdict = core.Normalize(raw)
-		if _, e := a.DB.Exec("INSERT INTO scan_results(job_id,scanned_at,verdict) VALUES(?,?,?) ON CONFLICT(job_id) DO NOTHING", id, stamp(), verdict); e != nil {
-			fail("Could not record scan result.")
-			return
-		}
-		if verdict != "CLEAN" && verdict != "MALICIOUS" {
-			a.routeScanFailure(ctx, id, s, path, digest, "Scanner returned an unverified result. Manual review required.")
-			return
-		}
-		verifiedDigest = digest
-	}
-
-	if e = a.transition(id, "ROUTING", verdict, digest, "", "", 0); e != nil {
+		a.routeCaptured(ctx, id, s, local, digest, verdict, "", "")
 		return
 	}
-	destination, state, e := routeResult(ctx, id, s, path, digest, verdict)
+	var used int
+	_ = a.DB.QueryRow("SELECT attempts FROM stage_attempts WHERE job_id=? AND stage='scan'", id).Scan(&used)
+	if used >= defaultInt(s.Profile.ScanAttempts, 5) {
+		a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", "Scan attempts exhausted; isolated for review.")
+		return
+	}
+	raw, scanErr := a.Scan(ctx, local, s.Scanner, s.Profile)
+	if scanErr != nil {
+		if used+1 >= defaultInt(s.Profile.ScanAttempts, 5) {
+			_, _ = a.stageAttempt(id, "scan")
+			a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", "Scan request attempts exhausted.")
+		} else {
+			a.retryStage(id, "scan", s.Profile, "UNKNOWN", digest, "", "Scanner request failed.")
+		}
+		return
+	}
+	if e = a.recordScanDetails(id, raw, s.Scanner.APIKey); e != nil {
+		a.retryStage(id, "scan", s.Profile, "UNKNOWN", digest, "", "Could not persist scanner response.")
+		return
+	}
+	verdict = core.Normalize(raw)
+	_, e = a.DB.Exec("INSERT INTO scan_results(job_id,scanned_at,verdict) VALUES(?,?,?) ON CONFLICT(job_id) DO UPDATE SET verdict=excluded.verdict", id, stamp(), verdict)
 	if e != nil {
-		fail("Destination transfer, tags or SHA-256 verification failed. Check destination write/read and tag permissions. Original preserved.")
-		a.Audit("routing.failed", id, "Verified scan result could not be published to its configured destination.")
 		return
 	}
-	if e = a.transition(id, state, verdict, digest, destination, "", 0); e == nil {
-		a.Audit("routing.verified", id, "Published and SHA-256 verified: "+destination)
-		if err := a.removeVerifiedSource(ctx, s, digest); err != nil {
-			_ = a.transition(id, "HELD", verdict, digest, destination, "Destination verified, but source removal failed. Check delete permissions or whether the source changed.", 0)
+	if verdict == "UNKNOWN" {
+		if scanException(raw) == "permanent" {
+			a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", "Permanent scanner exception; inspect scanner response.")
+			return
 		}
+		if used+1 >= defaultInt(s.Profile.ScanAttempts, 5) {
+			_, _ = a.stageAttempt(id, "scan")
+			a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", "Scan result remained unknown after retries.")
+		} else {
+			a.retryStage(id, "scan", s.Profile, "UNKNOWN", digest, "", "Transient or unsupported scanner result; scan retry pending.")
+		}
+		return
 	}
-
+	a.routeCaptured(ctx, id, s, local, digest, verdict, "", "")
 }
 func (a *App) monitor(ctx context.Context) {
 	ticker := time.NewTicker(time.Second)
 	lastRun := map[string]time.Time{}
+	active := map[string]bool{}
+	var activeMu sync.Mutex
+	slots := make(chan struct{}, 4)
+	var monitors sync.WaitGroup
+	defer monitors.Wait()
+	lastRecovery := time.Now()
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+		}
+		if time.Since(lastRecovery) > time.Minute {
+			lastRecovery = time.Now()
+			monitors.Add(1)
+			go func() {
+				defer monitors.Done()
+				c, cancel := context.WithTimeout(ctx, 50*time.Second)
+				defer cancel()
+				a.recoverySweep(c)
+			}()
 		}
 		profiles, e := a.List("profiles")
 		if e != nil {
@@ -314,34 +346,36 @@ func (a *App) monitor(ctx context.Context) {
 			if last, ok := lastRun[p.ID]; ok && time.Since(last) < p.Interval() {
 				continue
 			}
+			activeMu.Lock()
+			running := active[p.ID]
+			if !running {
+				select {
+				case slots <- struct{}{}:
+					active[p.ID] = true
+				default:
+					running = true
+				}
+			}
+			activeMu.Unlock()
+			if running {
+				continue
+			}
 			lastRun[p.ID] = time.Now()
-			a.monitorProfile(ctx, p)
+			monitors.Add(1)
+			go func(p Profile) {
+				defer monitors.Done()
+				defer func() { <-slots; activeMu.Lock(); delete(active, p.ID); activeMu.Unlock() }()
+				c, cancel := context.WithTimeout(ctx, 3*time.Minute)
+				defer cancel()
+				a.monitorProfile(c, p)
+			}(p)
 		}
 	}
 }
 
 // Unverified bytes are isolated in the failed destination, never in the clean destination.
 func (a *App) routeScanFailure(ctx context.Context, id string, s Snapshot, local, digest, reason string) {
-	if e := a.transition(id, "ROUTING", "UNKNOWN", digest, "", reason, 0); e != nil {
-		return
-	}
-	destination, _, err := routeResult(ctx, id, s, local, digest, "UNKNOWN")
-	if err != nil {
-		state := "RETRY_PENDING"
-		var attempts int
-		_ = a.DB.QueryRow("SELECT attempts FROM jobs WHERE id=?", id).Scan(&attempts)
-		if attempts >= 5 {
-			state = "HELD"
-		}
-		_ = a.transition(id, state, "UNKNOWN", digest, "", reason+" Failed destination unavailable; original preserved.", time.Minute)
-		a.Audit("routing.failed", id, "Scan failed destination could not be verified.")
-		return
-	}
-	if err := a.removeVerifiedSource(ctx, s, digest); err != nil {
-		reason += " Destination verified, but source removal failed; check delete permissions."
-	}
-	_ = a.transition(id, "HELD", "UNKNOWN", digest, destination, reason, 0)
-	a.Audit("routing.verified", id, "Unverified scan isolated for review: "+destination)
+	a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", reason)
 }
 
 // monitorProfile reads only the profile source; destinations are used only when routing.
@@ -371,6 +405,13 @@ func (a *App) monitorProfile(ctx context.Context, p Profile) {
 		}
 		for _, f := range files {
 			listed++
+			relative := strings.TrimPrefix(f.Key, m.Prefix+p.Prefix)
+			action, rule := p.FilePolicy(relative, f.Size)
+			_, _ = a.DB.Exec("INSERT INTO inventory(profile_id,key,etag,size,last_seen,status,reason) VALUES(?,?,?,?,?,'DISCOVERED','') ON CONFLICT(profile_id,key,etag) DO UPDATE SET size=excluded.size,last_seen=excluded.last_seen", p.ID, f.Key, f.ETag, f.Size, stamp())
+			if action == "ignore" || action == "hold" {
+				_, _ = a.DB.Exec("UPDATE inventory SET status=?,reason=? WHERE profile_id=? AND key=? AND etag=?", strings.ToUpper(action), rule, p.ID, f.Key, f.ETag)
+				continue
+			}
 
 			// Completed uploads are eligible on this poll. Unmarked uploads must remain unchanged across polls.
 			{
@@ -380,20 +421,23 @@ func (a *App) monitorProfile(ctx context.Context, p Profile) {
 					failures++
 					continue
 				}
-				if time.Now().Unix()-first < 10 {
+				if time.Now().Unix()-first < int64(defaultInt(p.QuietSeconds, 10)) {
 					waiting++
 					continue
 				}
 			}
 			cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-			_, e = a.enqueueExpected(cctx, p.ID, f.Key, f.ETag)
+			jobID, queueErr := a.enqueueExpected(cctx, p.ID, f.Key, f.ETag)
+			e = queueErr
 			cancel()
 			if e != nil {
 				failures++
+				_, _ = a.DB.Exec("UPDATE inventory SET status='ERROR',reason='Queue admission failed' WHERE profile_id=? AND key=? AND etag=?", p.ID, f.Key, f.ETag)
 				summary["lastError"] = redactString(redactString(e.Error(), m.Secret), sasSignature(m.Secret))
 				continue
 			}
 			queued++
+			_, _ = a.DB.Exec("UPDATE inventory SET status='ACCOUNTED',reason='Durable job exists',job_id=? WHERE profile_id=? AND key=? AND etag=?", jobID, p.ID, f.Key, f.ETag)
 		}
 		if next == "" {
 			break
