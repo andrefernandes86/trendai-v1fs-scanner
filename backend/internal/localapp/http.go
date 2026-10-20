@@ -103,6 +103,7 @@ func (a *App) Handler() http.Handler {
 		respond(w, 200, j)
 	})
 	mux.HandleFunc("POST /api/jobs/{id}/retry", a.retryJob)
+	mux.HandleFunc("POST /api/jobs/{id}/acknowledge", a.acknowledgeJob)
 	mux.HandleFunc("GET /api/status", a.status)
 	mux.HandleFunc("GET /api/audit", a.audit)
 	mux.HandleFunc("GET /livez", a.liveness)

@@ -65,3 +65,5 @@ Files are submitted unchanged through the SDK; the app does not truncate or spli
 ## Guided profiles and expandable views
 
 Profile setup uses Source → Destinations → Schedule → Protection → Options → Review. Optional controls start collapsed. Save requires an explicit action from Review; validation returns to and opens a field's step if needed. Profile cards show a compact summary and expand through View details. Light mode includes the sidebar and standard official logo; dark mode uses the inverse logo. Overview outcome cards open matching history views, with a dedicated Scan errors filter for unknown held/retry-pending records.
+
+**Record details:** Show scanner response opens a separate response panel; Hide scanner response closes it. Technical record (JSON) is collapsed separately. Refresh detection details reloads the saved record and an open response without starting a new scan or closing the drawer. Success and error messages appear inside the drawer.

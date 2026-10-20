@@ -6,11 +6,13 @@ A host-based Azure Blob, Azure Files, SMB and NFSv3 scanner with a React managem
 
 **New user? Follow the [illustrated step-by-step user guide](docs/user-guide.md)**: connect storage, configure scanning, create a profile, test safe/EICAR routing, monitor files and export results. No coding is required to use the console.
 
-- Current host: [open the console](http://192.168.1.52:8095).
+- Console: open `http://<your-server>:8095` (use `http://localhost:8095` on the server).
 - Administrator: [deploy, back up and upgrade](docs/operations.md#container-first-host-deployment).
 - Compressed files: [enable archive inspection, nesting and bomb-protection limits](docs/archive-inspection.md).
 - Customer PoC: [solution diagrams, components, workflow and acceptance checklist](docs/poc-architecture.md).
 - Technical reference: [architecture](docs/architecture.md), [profile options](docs/console.md), [reliability](docs/reliability.md).
+
+For a new operator or tester, use the [deployment and testing handoff checklist](docs/handoff.md). See the [publication secret review](docs/security-review.md) before sharing this repository publicly.
 
 ## Console workflow
 

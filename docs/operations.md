@@ -25,12 +25,12 @@ Existing unknown files created before the verbose TrendX parsing fix are histori
 
 ## Deploy on the current host
 
-The running console is **http://192.168.1.52:8095**. Container: `trendai-v1fs-scanner-1`. Repository: `/home/skynet/Documents/Codex/2026-10-19/files-pasted-by-the-user-vision/trendai-v1fs-scanner`.
+Example console address: **http://scanner-host:8095**. Replace the example hostname and `/srv` paths below with your deployment values. Container: `trendai-v1fs-scanner-1`. Repository: `/srv/trendai-v1fs-scanner`.
 
 From that repository, preserve the existing database and key by using the host override:
 
 ```bash
-export V1FS_HOST_DATA_DIR=/home/skynet/Documents/Codex/2026-10-19/files-pasted-by-the-user-vision/work/trendai-host-data
+export V1FS_HOST_DATA_DIR=/srv/trendai-v1fs-data
 docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml up -d --build
 docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml ps
 docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml logs --tail 100 scanner
@@ -54,7 +54,7 @@ docker compose logs --tail 100 scanner
 To retain the current host's existing encrypted state, use the host override (the scanner runs as UID/GID 1000, matching its existing data ownership):
 
 ```bash
-export V1FS_HOST_DATA_DIR=/home/skynet/Documents/Codex/2026-10-19/files-pasted-by-the-user-vision/work/trendai-host-data
+export V1FS_HOST_DATA_DIR=/srv/trendai-v1fs-data
 docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml up -d --build
 ```
 

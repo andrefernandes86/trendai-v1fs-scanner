@@ -2,7 +2,7 @@
 
 This guide takes you from an empty console to your first automatically scanned file. You do not need to write code. Ask your storage administrator for access details and your Trend administrator for a File Security API key.
 
-**On this host, open [the console](http://192.168.1.52:8095).** To install the product on another host, follow [deployment instructions](operations.md#container-first-host-deployment).
+**On this host, open [the console](http://scanner-host:8095).** To install the product on another host, follow [deployment instructions](operations.md#container-first-host-deployment).
 
 Screenshots below show the real console with demonstration settings. `examplestorage` and the example containers are placeholders, not working storage. The example profile is paused so the screenshots do not trigger scans.
 
@@ -286,3 +286,15 @@ Result tags automatically include `scan-failed=true` and `scanned=false` for inc
 When scan, download or copy retries are exhausted, the record is held with `scan-failed=true` and `failure-stage`. The retained source receives these labels as native Blob tags or a share JSON sidecar, after a source-version check. Existing Blob tags are preserved. If storage access, tag capacity, or source identity prevents annotation, record details explicitly report that the source tag could not be written. A copy failure does not erase a confirmed scan verdict or remove the source.
 
 Failed-file recovery reaffirms `scan-failed=true` when the result remains unknown. The file remains in its isolated Scan failed storage location, including a scanner-managed claim on shares, instead of being copied back into the input or promoted to Safe files. Exhausting recovery cycles leaves it held for manual review.
+
+## Stop scanning a held file
+
+In **File activity**, choose **HELD** and click **Acknowledge — stop scanning** next to the file. Confirm the message. The state becomes **ACKNOWLEDGED** and automatic retries/recovery stop for this exact upload version. Its unknown/failure verdict, file, tags, error evidence and audit history remain. It is not promoted to Safe files. A new upload version is processed normally. Acknowledged records remain available through **All states** or **ACKNOWLEDGED**. Hiding a record is separate and does not stop processing. If recovery is running, wait for it to finish before acknowledging.
+
+![Acknowledge a held file](images/held-acknowledge.png)
+
+![Acknowledged file with scanning stopped](images/file-acknowledged.png)
+
+**Record details:** Show scanner response opens a separate response panel; Hide scanner response closes it. Technical record (JSON) is collapsed separately. Refresh detection details reloads the saved record and an open response without starting a new scan or closing the drawer. Success and error messages appear inside the drawer.
+
+![Scanner response and refreshed detections](images/record-details.png)

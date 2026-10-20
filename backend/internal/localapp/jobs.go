@@ -89,7 +89,7 @@ func (a *App) enqueueExpected(ctx context.Context, id, key, expected string) (st
 	}
 	return a.insertJob(s)
 }
-func (a *App) insertJob(s Snapshot) (string, error) {
+func (a *App) insertJob(s Snapshot, recoveryParent ...string) (string, error) {
 	encoded, _ := json.Marshal([]any{s.Profile.ID, s.Profile.Revision, s.Source.BaseURL(), s.Key, s.ETag, s.Version})
 	if s.Source.Type() == "blob" {
 		encoded, _ = json.Marshal([]any{s.Profile.ID, s.Profile.Revision, s.Source.Account, s.Source.Container, s.Key, s.ETag, s.Version})
@@ -105,10 +105,19 @@ func (a *App) insertJob(s Snapshot) (string, error) {
 		return "", e
 	}
 	defer tx.Rollback()
+	if len(recoveryParent) > 0 {
+		var allowed int
+		if e = tx.QueryRow("SELECT count(*) FROM jobs WHERE id=? AND state='HELD' AND NOT EXISTS(SELECT 1 FROM recovery_links l JOIN jobs child ON child.id=l.child_id WHERE l.parent_id=? AND child.state IN ('QUEUED','SCANNING','ROUTING','RETRY_PENDING','COMPLETED','QUARANTINED','ACKNOWLEDGED'))", recoveryParent[0], recoveryParent[0]).Scan(&allowed); e != nil {
+			return "", e
+		}
+		if allowed != 1 {
+			return "", errors.New("Recovery is acknowledged, active or resolved")
+		}
+	}
 	// A profile edit must not create a second owner for the same active source version.
 	var existingID string
 	var existingSnapshot []byte
-	lookupErr := tx.QueryRow("SELECT id,snapshot FROM jobs WHERE profile_id=? AND source_id=? AND key=? AND etag=? AND version=? AND state IN ('QUEUED','SCANNING','ROUTING','RETRY_PENDING') ORDER BY created_at LIMIT 1", s.Profile.ID, s.Source.ID, s.Key, s.ETag, s.Version).Scan(&existingID, &existingSnapshot)
+	lookupErr := tx.QueryRow("SELECT id,snapshot FROM jobs WHERE profile_id=? AND source_id=? AND key=? AND etag=? AND version=? AND state IN ('QUEUED','SCANNING','ROUTING','RETRY_PENDING','ACKNOWLEDGED') ORDER BY created_at LIMIT 1", s.Profile.ID, s.Source.ID, s.Key, s.ETag, s.Version).Scan(&existingID, &existingSnapshot)
 	if lookupErr == nil {
 		var previous Snapshot
 		if err := a.Unseal(existingSnapshot, &previous); err != nil {
@@ -128,6 +137,11 @@ func (a *App) insertJob(s Snapshot) (string, error) {
 	if n > 0 {
 		_, e = tx.Exec("INSERT INTO audit(at,action,object_id,detail) VALUES(?,?,?,?)", stamp(), "job.queued", id, s.Key)
 		if e != nil {
+			return "", e
+		}
+	}
+	if len(recoveryParent) > 0 {
+		if _, e = tx.Exec("INSERT OR IGNORE INTO recovery_links(parent_id,child_id,created_at) VALUES(?,?,?)", recoveryParent[0], id, stamp()); e != nil {
 			return "", e
 		}
 	}

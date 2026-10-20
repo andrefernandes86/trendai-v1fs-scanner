@@ -95,7 +95,7 @@ func (a *App) recoverJob(ctx context.Context, parent string, enrich bool) (strin
 		return "", fmt.Errorf("Recovery budget exhausted.")
 	}
 	var active int
-	_ = a.DB.QueryRow("SELECT count(*) FROM recovery_links l JOIN jobs j ON j.id=l.child_id WHERE l.parent_id=? AND j.state IN ('QUEUED','SCANNING','ROUTING','RETRY_PENDING','COMPLETED','QUARANTINED')", parent).Scan(&active)
+	_ = a.DB.QueryRow("SELECT count(*) FROM recovery_links l JOIN jobs j ON j.id=l.child_id WHERE l.parent_id=? AND j.state IN ('QUEUED','SCANNING','ROUTING','RETRY_PENDING','COMPLETED','QUARANTINED','ACKNOWLEDGED')", parent).Scan(&active)
 	if active > 0 {
 		return "", fmt.Errorf("A recovery is already active or resolved.")
 	}
@@ -105,11 +105,7 @@ func (a *App) recoverJob(ctx context.Context, parent string, enrich bool) (strin
 	s.Profile.Revision += int64(children+1) * 1000000
 	// If the result remains unknown, retain it in the existing isolated location rather than recopying to the same root.
 
-	id, e := a.insertJob(s)
-	if e != nil {
-		return "", e
-	}
-	_, e = a.DB.Exec("INSERT OR IGNORE INTO recovery_links(parent_id,child_id,created_at) VALUES(?,?,?)", parent, id, stamp())
+	id, e := a.insertJob(s, parent)
 	if e != nil {
 		return "", e
 	}
