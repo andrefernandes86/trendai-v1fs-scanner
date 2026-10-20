@@ -172,7 +172,9 @@ func (f *fakeAzure) Do(r *http.Request) (*http.Response, error) {
 	key := r.URL.Path
 	status := 200
 	var b []byte
-	if r.Method == "PUT" && r.URL.Query().Get("comp") == "tags" {
+	if r.Method == "DELETE" {
+		status = 202
+	} else if r.Method == "PUT" && r.URL.Query().Get("comp") == "tags" {
 		status = 204
 	} else if r.Method == "PUT" {
 		if _, ok := f.objects[key]; ok && r.Header.Get("If-None-Match") == "*" {

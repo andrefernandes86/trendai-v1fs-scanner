@@ -59,12 +59,10 @@ func (a *App) enqueueExpected(ctx context.Context, id, key, expected string) (st
 		}
 		s.ETag = info.ETag
 		s.Size = info.Size
-		if expected != "" && s.ETag != expected {
+		if expected != "" && strings.Trim(s.ETag, "\"") != strings.Trim(expected, "\"") {
 			return "", errors.New("file changed during discovery; waiting for stability")
 		}
-		if s.Profile.RequireMarker && !info.Complete {
-			return "", errors.New("profile requires a fresh filename.complete sidecar after upload completion")
-		}
+
 		if s.Size > 2<<30 {
 			return "", errors.New("file exceeds 2 GiB host policy")
 		}
@@ -81,7 +79,7 @@ func (a *App) enqueueExpected(ctx context.Context, id, key, expected string) (st
 			return "", errors.New("blob has no stable identity")
 		}
 		s.ETag = string(*props.ETag)
-		if expected != "" && s.ETag != expected {
+		if expected != "" && strings.Trim(s.ETag, "\"") != strings.Trim(expected, "\"") {
 			return "", errors.New("source changed during discovery; waiting for stability")
 		}
 		s.Size = *props.ContentLength
@@ -91,11 +89,7 @@ func (a *App) enqueueExpected(ctx context.Context, id, key, expected string) (st
 		if props.VersionID != nil {
 			s.Version = *props.VersionID
 		}
-		if s.Profile.RequireMarker {
-			if !completeMetadata(props.Metadata) {
-				return "", errors.New("profile requires v1fs-complete=true metadata on completed uploads")
-			}
-		}
+
 	}
 	return a.insertJob(s)
 }
@@ -279,7 +273,9 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 	}
 	if e = a.transition(id, state, verdict, digest, destination, "", 0); e == nil {
 		a.Audit("routing.verified", id, "Published and SHA-256 verified: "+destination)
-		a.cleanupTestFile(ctx, s, digest)
+		if err := a.removeVerifiedSource(ctx, s, digest); err != nil {
+			_ = a.transition(id, "HELD", verdict, digest, destination, "Destination verified, but source removal failed. Check delete permissions or whether the source changed.", 0)
+		}
 	}
 
 }
@@ -328,6 +324,9 @@ func (a *App) routeScanFailure(ctx context.Context, id string, s Snapshot, local
 		a.Audit("routing.failed", id, "Scan failed destination could not be verified.")
 		return
 	}
+	if err := a.removeVerifiedSource(ctx, s, digest); err != nil {
+		reason += " Destination verified, but source removal failed; check delete permissions."
+	}
 	_ = a.transition(id, "HELD", "UNKNOWN", digest, destination, reason, 0)
 	a.Audit("routing.verified", id, "Unverified scan isolated for review: "+destination)
 }
@@ -359,12 +358,9 @@ func (a *App) monitorProfile(ctx context.Context, p Profile) {
 		}
 		for _, f := range files {
 			listed++
-			if p.RequireMarker && !f.Complete {
-				missing++
-				continue
-			}
+
 			// Completed uploads are eligible on this poll. Unmarked uploads must remain unchanged across polls.
-			if !f.Complete {
+			{
 				var first int64
 				e = a.DB.QueryRow("INSERT INTO observations(profile_id,key,etag,first_seen) VALUES(?,?,?,?) ON CONFLICT(profile_id,key) DO UPDATE SET first_seen=CASE WHEN observations.etag=excluded.etag THEN observations.first_seen ELSE excluded.first_seen END,etag=excluded.etag RETURNING first_seen", p.ID, f.Key, f.ETag, time.Now().Unix()).Scan(&first)
 				if e != nil {
@@ -381,6 +377,7 @@ func (a *App) monitorProfile(ctx context.Context, p Profile) {
 			cancel()
 			if e != nil {
 				failures++
+				summary["lastError"] = redactString(redactString(e.Error(), m.Secret), sasSignature(m.Secret))
 				continue
 			}
 			queued++

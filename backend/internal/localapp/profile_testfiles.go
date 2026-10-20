@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -112,13 +113,10 @@ func (a *App) profileTestFile(w http.ResponseWriter, r *http.Request) {
 	respond(w, 201, map[string]any{"key": key, "source": m.BaseURL() + "/" + fullKey, "automatic": p.Enabled, "request": map[string]any{"kind": input.Kind, "profileId": p.ID, "bytes": len(content)}, "response": map[string]any{"uploaded": true, "completionMarker": true, "sha256": digest}, "message": "Test file uploaded to the profile source. Automatic monitoring will scan and route it after upload stability checks. With automatic monitoring disabled, scan it from Storage explorer."})
 }
 
-// Cleanup is restricted to app-generated test files with the exact scanned digest.
-func (a *App) cleanupTestFile(ctx context.Context, s Snapshot, digest string) {
+// Remove a source only after destination verification; refuse changed source identities.
+func (a *App) removeVerifiedSource(ctx context.Context, s Snapshot, digest string) error {
 	key := s.Key
-	var owned generatedTestFile
-	if a.Get("testfiles", testFileID(s.Source, key), &owned) != nil || owned.Digest != digest {
-		return
-	}
+
 	var err error
 	if s.Source.Type() == "blob" {
 		c, e := s.Source.ContainerClient()
@@ -133,7 +131,10 @@ func (a *App) cleanupTestFile(ctx context.Context, s Snapshot, digest string) {
 			// Verify current content and identity again before removing this generated input.
 			info, e := fs.Stat(key)
 			err = e
-			if err == nil && infoTag(info) == s.ETag {
+			if err == nil && infoTag(info) != s.ETag {
+				err = errors.New("source changed after scan")
+			}
+			if err == nil {
 				err = verifyRemote(fs, key, digest, s.Size)
 				if err == nil {
 					err = fs.Remove(key)
@@ -146,6 +147,7 @@ func (a *App) cleanupTestFile(ctx context.Context, s Snapshot, digest string) {
 		}
 	}
 	if err != nil {
-		a.Audit("profile.test_cleanup_failed", s.Profile.ID, "Destination verified; generated source could not be removed.")
+		a.Audit("routing.source_remove_failed", s.Profile.ID, "Destination verified; source could not be removed.")
 	}
+	return err
 }

@@ -39,20 +39,22 @@ func TestMonitorScansOnlySourceAndReportsMarkerSkips(t *testing.T) {
 		t.Fatal(e)
 	}
 	a.monitorProfile(context.Background(), p)
+	_, _ = a.DB.Exec("UPDATE observations SET first_seen=first_seen-20")
+	a.monitorProfile(context.Background(), p)
 	jobs, e := a.Jobs()
-	if e != nil || len(jobs) != 1 || jobs[0].Key != "ready.txt" {
+	if e != nil || len(jobs) != 2 {
 		t.Fatalf("jobs %v %v", jobs, e)
 	}
 	var summary struct {
 		WaitingForMarker int `json:"waitingForMarker"`
 		Queued           int `json:"queued"`
 	}
-	if e = a.Get("monitorStatus", p.ID, &summary); e != nil || summary.WaitingForMarker != 1 || summary.Queued != 1 {
+	if e = a.Get("monitorStatus", p.ID, &summary); e != nil || summary.WaitingForMarker != 0 || summary.Queued != 2 {
 		t.Fatalf("summary %+v %v", summary, e)
 	}
 	a.monitorProfile(context.Background(), p)
 	jobs, e = a.Jobs()
-	if e != nil || len(jobs) != 1 {
+	if e != nil || len(jobs) != 2 {
 		t.Fatal("scheduled polling duplicated jobs")
 	}
 }

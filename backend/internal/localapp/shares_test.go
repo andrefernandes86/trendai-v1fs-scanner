@@ -101,6 +101,8 @@ func TestShareBrowsingDownloadAndAtomicRouting(t *testing.T) {
 	os.Symlink("/etc", stores["source"].p("unsafe"))
 	for _, kind := range []string{"azureFiles", "smb", "nfs"} {
 		t.Run(kind, func(t *testing.T) {
+			os.WriteFile(stores["source"].p("incoming/report.txt"), content, 0600)
+			os.WriteFile(stores["source"].p("incoming/report.txt.complete"), nil, 0600)
 			m := Mount{ID: "source", Kind: kind, Name: "Source", Account: "acct", Share: "incoming", Server: "nas", Export: "/incoming"}
 			files, _, e := ListBlobs(context.Background(), m, "incoming/", "")
 			if e != nil || len(files) != 1 || !files[0].Complete {
@@ -129,9 +131,8 @@ func TestShareBrowsingDownloadAndAtomicRouting(t *testing.T) {
 			if !strings.Contains(destination, "bad") {
 				t.Fatal(destination)
 			}
-			info, _ := os.Stat(stores["source"].p(s.Key))
-			if info.Size() != int64(len(content)) {
-				t.Fatal("source changed")
+			if _, err := os.Stat(stores["source"].p(s.Key)); !os.IsNotExist(err) {
+				t.Fatal("verified source was not moved")
 			}
 			found := false
 			filepath.WalkDir(stores["bad"].root, func(p string, d os.DirEntry, e error) error {
