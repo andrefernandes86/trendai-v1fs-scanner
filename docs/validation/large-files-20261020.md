@@ -23,3 +23,7 @@ During capture, container memory samples were approximately 36–74 MiB while th
 ## Validation boundaries
 
 No full 100 GB end-to-end or customer-scale soak certification is claimed. SDK outcomes remain subject to scanner inspection and format/extraction limits. The original file is not truncated or split by this application. Archive extraction was discussed but not implemented. Customer validation should include supported large documents, representative archives, insufficient disk, scanner timeout, interrupted transfer/restart and verified deletion under load.
+
+### First live SDK outcome
+
+The service returned a response for the original 3,727,527,135-byte object. It identified PKZIP and reported ATSE error code -82 (ErrorOccur: pfcb_status=-82); the engine reported roughly 67 seconds of elapsed work. Zero reported detections alongside an engine error is not a clean verdict. The app recorded UNKNOWN and scheduled its next bounded retry, retaining the original at source. This verifies that the removed application size cap no longer prevents SDK submission. It does not establish why ATSE returned -82 or prove archive contents were fully inspected. Public documentation reviewed did not provide a definitive mapping for this code; vendor analysis may be required. No extraction workaround or clean override was applied.

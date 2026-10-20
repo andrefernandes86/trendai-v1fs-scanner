@@ -49,3 +49,5 @@ Watchdog fault tests cover abrupt child termination and a completely stopped/unr
 - [x] Remove 2 GiB application rejection; up to 100 GB SDK submission, profile size/oversize policy, streaming verification, disk admission, long-job timeouts and large-file concurrency.
 - [ ] Full 100 GB end-to-end and customer-scale throughput/soak validation; distinguish engine inspection limits from submission capability.
 - [ ] Optional archive extraction: proposal only, implementation not authorized. Isolated ZIP/TAR-GZIP workers, strict expansion/path/time budgets, per-entry evidence; incomplete extraction never clean.
+
+- [ ] Investigate the live VPLE.zip SDK/ATSE -82 response with vendor error-code guidance. Application now submits the original 3.73 GB file; UNKNOWN is retained and bounded retries apply. Do not reclassify as clean from zero detections when the engine reports an error. Archive extraction remains unimplemented pending approval.
