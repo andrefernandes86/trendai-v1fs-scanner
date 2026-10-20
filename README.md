@@ -24,7 +24,9 @@ Clean results go to clean storage, malicious results to malicious storage, and u
 
 New destination filenames use `original-name_<job-id>.ext`, e.g. `report_<job-id>.zip`. Files retain their original bytes and format: the app does not create ZIP archives or add archive passwords. Existing archive passwords belong to the uploader and cannot be recovered by the app. Earlier transfers retain their previous destination paths.
 
-The Overview, File activity and Audit log pages offer browser-persisted auto-refresh settings. Overview shows Pending scans, Scanning now and rolling minute/hour/day/30-day counts. CSV export includes the entire job history; the activity view offers filtered, paginated history. See [console usage](docs/console.md) and [pending work](to-do.md).
+The Overview, File activity and Audit log pages offer browser-persisted auto-refresh settings. Storage explorer shows linked scan verdicts and native Azure tags instead of upload-completion markers. The Sizing calculator after Audit log provides transparent CPU/RAM/disk/concurrency estimates, starting at 12,000 files/day.
+
+Overview shows Pending scans, Scanning now and rolling minute/hour/day/30-day counts. CSV export includes the entire job history; the activity view offers full-history search, matching totals, first/last/page navigation and 100–1000 rows per page. See [console usage](docs/console.md) and [pending work](to-do.md).
 
 ## Run directly
 

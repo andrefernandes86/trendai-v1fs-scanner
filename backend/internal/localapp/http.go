@@ -91,6 +91,8 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/jobs/{id}/scan-result", a.scanDetails)
 	mux.HandleFunc("GET /api/jobs/export.csv", a.exportJobsCSV)
 	mux.HandleFunc("GET /api/statistics", a.statistics)
+	mux.HandleFunc("GET /api/jobs/page", a.jobHistory)
+	mux.HandleFunc("GET /api/jobs/{id}", a.jobRecord)
 	mux.HandleFunc("GET /api/jobs", func(w http.ResponseWriter, r *http.Request) {
 		j, e := a.queryJobs(r)
 		if e != nil {
@@ -297,11 +299,12 @@ func (a *App) blobs(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	files, next, e := ListBlobs(ctx, m, r.URL.Query().Get("prefix"), r.URL.Query().Get("marker"))
+	files, next, e := ListBlobs(ctx, m, r.URL.Query().Get("prefix"), r.URL.Query().Get("marker"), true)
 	if e != nil {
 		problem(w, 502, "Cannot list files. Test this storage connection and check permissions.")
 		return
 	}
+	a.attachStorageResults(m, files)
 	respond(w, 200, map[string]any{"files": files, "nextMarker": next})
 }
 func (a *App) profiles(w http.ResponseWriter, r *http.Request) {

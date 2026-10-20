@@ -42,3 +42,13 @@ Profile sections 6–8 configure quiet periods/temporary ignores, retries, exclu
 ## Parallel processing
 
 Set **Simultaneous scans** in profile section 3 (default 2, range 1–32). The shared engine has 8 worker slots by default; an operator can change V1FS_MAX_WORKERS (1–32). Slots include download, scan, route and finalization. Raising a limit releases eligible queued work; lowering it waits for existing active files. The console and engine are independent processes with independent watchdog recovery. Overview shows engine state, shared capacity, Pending scans and Scanning now. Profile edits reuse an existing active source-version job instead of enqueueing duplicates.
+
+## Complete file history
+
+File activity reads a counted, filtered history page from `/api/jobs/page`. It shows the matching total and row range, with First/Previous/Next/Last controls and a page selector at both ends of the table. Rows per page supports 100, 250, 500 or 1000; choose 1000 to view an entire thousand-file batch together. Search and all filters operate over the full database, reset the page and share the same total-count predicate. Clear filters restores the full list. Older records remain available through pagination. CSV export still covers full history independently of the displayed page.
+
+## Result evidence and warnings
+
+Storage explorer separates recorded scan verdicts from native Blob tags; the retired upload completion-marker column is gone. File details links the exact destination to its job, malware detections and authenticated scanner-response view. Required scanned/verdict tags are generated even without custom labels. Tag-list permission failures fall back to metadata listing with an explicit notice, rather than failing browsing. Full responses remain encrypted in the local database.
+
+Assurance separates overdue active work from held review. Historical source-read failures are automatically superseded only after a later recorded successful scan of the identical SHA-256 and a fresh destination readback, with the original source identity absent/replaced. The original UNKNOWN verdict/error and an audit event remain. See the user guide for the sizing calculator and explicit planning assumptions.

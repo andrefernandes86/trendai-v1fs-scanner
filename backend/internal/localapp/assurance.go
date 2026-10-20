@@ -30,9 +30,9 @@ func (a *App) assurance(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		var overdue int
-		_ = a.DB.QueryRow("SELECT count(*) FROM jobs WHERE profile_id=? AND state IN ('QUEUED','SCANNING','ROUTING','RETRY_PENDING','HELD') AND julianday(created_at)<julianday(?)", p.ID, time.Now().Add(-time.Duration(defaultInt(p.ProcessingDeadlineSeconds, 3600))*time.Second).UTC().Format(time.RFC3339Nano)).Scan(&overdue)
+		_ = a.DB.QueryRow("SELECT count(*) FROM jobs WHERE profile_id=? AND state IN ('QUEUED','SCANNING','ROUTING','RETRY_PENDING') AND julianday(created_at)<julianday(?)", p.ID, time.Now().Add(-time.Duration(defaultInt(p.ProcessingDeadlineSeconds, 3600))*time.Second).UTC().Format(time.RFC3339Nano)).Scan(&overdue)
 		if overdue > 0 {
-			alerts = append(alerts, map[string]any{"code": "OVERDUE_FILES", "profileId": p.ID, "count": overdue, "severity": "warning", "message": "Files exceeded the processing deadline or require manual review."})
+			alerts = append(alerts, map[string]any{"code": "OVERDUE_FILES", "profileId": p.ID, "count": overdue, "severity": "warning", "message": "Active files exceeded the processing deadline. Check queue size, scanner response and storage errors."})
 		}
 	}
 	var excluded, total int
@@ -42,6 +42,9 @@ func (a *App) assurance(w http.ResponseWriter, r *http.Request) {
 	}
 	var unresolved, unaccounted int
 	_ = a.DB.QueryRow("SELECT count(*) FROM jobs WHERE state='HELD'").Scan(&unresolved)
+	if unresolved > 0 {
+		alerts = append(alerts, map[string]any{"code": "HELD_FILES", "severity": "warning", "count": unresolved, "message": "Files are held for review. Open File activity, filter HELD, and inspect each error before retrying or recovering."})
+	}
 	_ = a.DB.QueryRow("SELECT count(*) FROM inventory WHERE status IN ('DISCOVERED','ERROR')").Scan(&unaccounted)
 	var disk syscall.Statfs_t
 	if syscall.Statfs(a.DataDir, &disk) == nil && disk.Blocks > 0 && disk.Bavail*100/disk.Blocks < 10 {

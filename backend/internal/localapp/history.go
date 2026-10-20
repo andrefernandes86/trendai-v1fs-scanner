@@ -8,14 +8,18 @@ import (
 )
 
 func (a *App) queryJobs(r *http.Request) ([]Job, error) {
+	where, args, limit, offset := jobQuery(r, 500)
+	return a.jobsPage(where, args, limit, offset)
+}
+func jobQuery(r *http.Request, maximum int) (string, []any, int, int) {
 	q := r.URL.Query()
 	offset, _ := strconv.Atoi(q.Get("offset"))
 	if offset < 0 {
 		offset = 0
 	}
 	limit, _ := strconv.Atoi(q.Get("limit"))
-	if limit < 1 || limit > 500 {
-		limit = 500
+	if limit < 1 || limit > maximum {
+		limit = maximum
 	}
 	parts := []string{}
 	args := []any{}
@@ -45,7 +49,7 @@ func (a *App) queryJobs(r *http.Request) ([]Job, error) {
 	if len(parts) > 0 {
 		where = " WHERE " + strings.Join(parts, " AND ")
 	}
-	return a.jobsPage(where, args, limit, offset)
+	return where, args, limit, offset
 }
 func (a *App) retention(w http.ResponseWriter, r *http.Request) {
 	var input struct {
@@ -92,4 +96,25 @@ func (a *App) retention(w http.ResponseWriter, r *http.Request) {
 	}
 	a.Audit("retention.applied", "jobs", "Removed "+strconv.Itoa(n)+" resolved records older than "+strconv.Itoa(input.Days)+" days; destination files were not deleted.")
 	respond(w, 200, map[string]any{"removed": n, "destinationFilesUntouched": true})
+}
+
+func (a *App) jobHistory(w http.ResponseWriter, r *http.Request) {
+	where, args, limit, offset := jobQuery(r, 1000)
+	var total int
+	if err := a.DB.QueryRowContext(r.Context(), "SELECT count(*) FROM jobs j"+where, args...).Scan(&total); err != nil {
+		problem(w, 500, "Could not count job history.")
+		return
+	}
+	// Keep a now-empty last page in range after retention/filter changes.
+	if total == 0 {
+		offset = 0
+	} else if offset >= total {
+		offset = ((total - 1) / limit) * limit
+	}
+	items, err := a.jobsPage(where, args, limit, offset)
+	if err != nil {
+		problem(w, 500, "Could not read job history.")
+		return
+	}
+	respond(w, 200, map[string]any{"items": items, "total": total, "offset": offset, "limit": limit})
 }

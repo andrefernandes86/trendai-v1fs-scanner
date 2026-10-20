@@ -35,6 +35,11 @@
 - [ ] Further throughput/observability: bounded parallel source admission, backlog age/rate indicators and customer-scale/soak validation. Earlier 1.5–1.7 files/second measurements describe the previous serialized runtime, not a capacity promise for the parallel runtime.
 - [ ] Broader archive validation: encrypted archives, nested archives, extraction limits and large archive mixes. Ordinary ZIP detection was verified; this does not establish coverage for every compressed format.
 
+- [x] Full counted file history with 100–1000 rows/page, first/last/page navigation and full-history filtering.
+- [x] Storage explorer native tags and linked scan results; automatic reserved verdict tags and permission fallback.
+- [x] Separate overdue/held alerts and checksum-proven historical supersession without erasing original scan evidence.
+- [x] Transparent CPU/RAM/disk/concurrency sizing calculator after Audit log; 12,000 files/day example and illustrated guide.
+
 ## Explicit limits and optional work
 
 Polling cannot detect files removed before observation. Paused uploads can appear stable. NFS supports v3 TCP AUTH_SYS, not NFSv4/Kerberos. Existing destination names are not retroactively renamed. Broad exclusions reduce malware coverage. Existing encrypted ZIP passwords belong to the uploader; the app preserves original bytes and adds no archive encryption. A managed password/archive conversion feature is optional and has not been requested as a concrete workflow.

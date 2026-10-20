@@ -21,4 +21,5 @@ try{
  await page.getByRole('button',{name:'Scan profiles',exact:true}).click();await shot('scan-profile.png');
  await page.getByRole('button',{name:'Edit profile',exact:true}).click();await shot('profile-routing.png');await page.locator('.profile-section').filter({has:page.getByRole('heading',{name:'2. Destinations',exact:true})}).screenshot({path:new URL('profile-destinations.png',output).pathname});await page.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.getByRole('button',{name:'File activity',exact:true}).click();await shot('file-activity.png');
+ await page.getByRole('button',{name:'Sizing calculator',exact:true}).click();await shot('sizing-calculator.png');
 }finally{await browser.close()}

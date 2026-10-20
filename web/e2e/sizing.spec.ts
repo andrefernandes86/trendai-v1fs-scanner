@@ -1,0 +1,9 @@
+import {test,expect} from '@playwright/test';
+import {calculateSizing,sizingDefaults} from '../src/sizing';
+test('12k sizing assumptions and invalid inputs',()=>{
+ const r=calculateSizing(sizingDefaults)!;expect(r.slots).toBe(4);expect(r.cpu).toBe(4);expect(r.memory).toBe(4);expect(r.disk).toBe(110);expect(calculateSizing({...sizingDefaults,hours:0})).toBeNull();expect(calculateSizing({...sizingDefaults,averageMiB:500})).toBeNull();expect(calculateSizing({...sizingDefaults,files:1200000})!.instances).toBeGreaterThan(1);
+});
+test('sizing menu and storage results use the current vocabulary',async({page})=>{
+ await page.goto('/');if(await page.getByRole('button',{name:'Create administrator & continue'}).isVisible()){await page.getByLabel('Create administrator password').fill('test-only-password-2026');await page.getByLabel('Confirm password').fill('test-only-password-2026');await page.getByRole('button',{name:'Create administrator & continue'}).click()}else{await page.waitForTimeout(2100);await page.getByLabel('Administrator password').fill('test-only-password-2026');await page.getByRole('button',{name:'Sign in',exact:true}).click()}
+ await expect(page.getByRole('heading',{name:'Security overview'})).toBeVisible();await expect(page.locator('.brand-product')).toHaveText('VISION ONE FILE SECURITY');await page.getByRole('button',{name:'Sizing calculator',exact:true}).click();await expect(page.getByLabel('Files per day',{exact:false})).toHaveValue('12000');await expect(page.getByText('4 vCPU',{exact:true})).toBeVisible();await expect(page.getByText('110 GiB SSD',{exact:true})).toBeVisible();await page.getByRole('button',{name:'Storage explorer',exact:true}).click();await expect(page.getByRole('columnheader',{name:'SCAN RESULT',exact:true})).toBeVisible();await expect(page.getByRole('columnheader',{name:'RESULT TAGS',exact:true})).toBeVisible();await expect(page.getByText('COMPLETION MARKER',{exact:true})).toHaveCount(0);
+});

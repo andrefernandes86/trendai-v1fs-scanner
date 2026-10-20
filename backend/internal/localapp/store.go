@@ -220,6 +220,7 @@ CREATE TABLE IF NOT EXISTS scan_results(job_id TEXT PRIMARY KEY, scanned_at TEXT
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,key TEXT NOT NULL,profile_id TEXT NOT NULL,profile_name TEXT NOT NULL,source_id TEXT NOT NULL,etag TEXT NOT NULL,version TEXT NOT NULL,size INTEGER NOT NULL,state TEXT NOT NULL,verdict TEXT NOT NULL DEFAULT 'UNKNOWN',digest TEXT NOT NULL DEFAULT '',destination TEXT NOT NULL DEFAULT '',error TEXT NOT NULL DEFAULT '',attempts INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,available_at INTEGER NOT NULL,snapshot BLOB NOT NULL);
 CREATE INDEX IF NOT EXISTS pending_jobs ON jobs(state,available_at);
 CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,action TEXT NOT NULL,object_id TEXT NOT NULL,detail TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS jobs_destination ON jobs(destination);
 CREATE INDEX IF NOT EXISTS jobs_history_page ON jobs(created_at DESC,id DESC);
 CREATE INDEX IF NOT EXISTS jobs_newer_completed ON jobs(source_id,key,profile_id,created_at DESC) WHERE state IN ('COMPLETED','QUARANTINED');
 CREATE INDEX IF NOT EXISTS jobs_active_version ON jobs(profile_id,source_id,key,etag,version) WHERE state IN ('QUEUED','SCANNING','ROUTING','RETRY_PENDING');

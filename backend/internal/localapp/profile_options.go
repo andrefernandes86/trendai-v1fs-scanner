@@ -22,6 +22,9 @@ var tagText = regexp.MustCompile(`^[a-zA-Z0-9 +\-./:=_]*$`)
 
 // Tags are portable key=value pairs; verdict-specific values override common ones.
 func (p Profile) ResultTags(verdict string) (map[string]string, error) {
+	if verdict != "CLEAN" && verdict != "MALICIOUS" {
+		return nil, fmt.Errorf("Result tags require a confirmed clean or malicious verdict")
+	}
 	result := map[string]string{}
 	specific := p.CleanTags
 	if verdict == "MALICIOUS" {
@@ -40,6 +43,12 @@ func (p Profile) ResultTags(verdict string) (map[string]string, error) {
 			}
 			result[k] = v
 		}
+	}
+	for key, expected := range map[string]string{"scanned": "true", "verdict": strings.ToLower(verdict)} {
+		if value, ok := result[key]; ok && value != expected {
+			return nil, fmt.Errorf("%s is a reserved result tag; expected %s", key, expected)
+		}
+		result[key] = expected
 	}
 	if len(result) > 10 {
 		return nil, fmt.Errorf("Use at most 10 combined tags per verdict.")

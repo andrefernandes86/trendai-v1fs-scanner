@@ -138,7 +138,7 @@ In **Overview → Files scanned**:
 - **Past minute/hour/24 hours/30 days** are rolling totals for jobs with a scanner response. They are not queue counts. Open **How counts are calculated** for details.
 - Set **Auto-refresh** to the update interval you want, or choose Off and use **Refresh**. The current count is a snapshot from the latest refresh. This setting is available on Overview, File activity and Audit log, and is remembered in your browser.
 
-In **File activity**, search by filename, choose a verdict/state/date filter, or use Previous/Next for history. Click a filename to inspect its result, malware names when recorded, destination, errors and integrity evidence. **Show scanner response** reveals recorded scanner details; older records may not have them.
+In **File activity**, the counter shows exactly how many records match, for example **Showing 1–100 of 1,000 files**. Use **First**, **Previous**, **Next**, **Last** or the **Page** selector above or below the table. To display a complete 1,000-file batch on one page, set **Rows per page → 1000**. Larger histories remain available across pages; there is no latest-500 history cutoff. Search by filename or select a verdict/state/date filter to search the full history, not only the visible rows. Changing a filter returns to page 1. Use **Clear filters** to restore the full list. Click a filename to inspect its result, malware names when recorded, destination, errors and integrity evidence. **Show scanner response** reveals recorded scanner details; older records may not have them.
 
 | State/result | Meaning | What to do |
 |---|---|---|
@@ -172,3 +172,27 @@ Click **Export CSV** on Overview or File activity to download the full job histo
 | Page looks unchanged | Check Auto-refresh and Last refreshed; click Refresh. |
 
 Ask an administrator to use the [operations guide](operations.md) for container health, backups, upgrades and rollback. Keep the database and encryption key together in backups; do not delete them to fix a sign-in or scan problem.
+
+## Storage results and native tags
+
+Storage explorer shows **Scan result** and **Result tags** for destination files. The earlier **Completion marker / Not set** column described upload metadata, not a scan verdict, and has been removed. For Azure Blob, these are actual native tags returned by Azure. Clean/malicious destinations automatically receive `scanned=true` and the corresponding `verdict` tag, even when custom tag fields are blank; reserved tags cannot contradict the scanner result. Additional tag permissions may be needed. If tag reads are denied, the file list still loads and reports that tags are unavailable.
+
+Open **File details** to see the exact destination's linked scan record, malware names and recorded scanner response. Full responses stay encrypted in the application database; compact tags and metadata stay with the blob. A tag alone is not proof of a scan: the console links results only to an exact recorded destination. Unlinked files say NOT RECORDED. File shares retain their JSON result sidecars; native Azure tag columns do not imply that every share has native tags.
+
+## Understanding processing warnings
+
+**Active files exceeded the processing deadline** means work is still queued/scanning/routing beyond the profile's alert threshold. Check queue size, concurrency, scanner availability and storage errors. The threshold is an alert, not a deletion rule.
+
+**Files held for review** is a separate condition. Click **Review held files**, open the record and read its error. Fix credentials, file identity or destination permissions before retrying. A file that was merely renamed or re-uploaded is not automatically assumed safe.
+
+An old source-read failure can become **SUPERSEDED** only if a later successful scan covers the same recorded filename/profile/source and exact SHA-256, its destination bytes are freshly reverified, and the old source identity is absent or replaced. This resolves a historical duplicate warning without changing its original UNKNOWN verdict/error or deleting a file. Missing evidence, changed destination bytes, source access errors or an unchanged original still at source keep the record HELD. Audit log records the verified replacement job.
+
+## Sizing for 12,000 files per day
+
+Choose **Sizing calculator**, directly after Audit log. It starts with 12,000 files/day, an 8-hour processing window, 5 MiB average / 250 MiB maximum file size, a 4× arrival peak, one second per active file and 2× headroom. Under those assumptions, the application-host estimate is **4 vCPU, 4 GiB RAM, 110 GiB SSD and 4 simultaneous active files**. The disk estimate includes 90 days of 32 KiB/job history, WAL/growth allowance, temporary files and free-space reserve. It does not include remote destination storage or a separately hosted local scan engine.
+
+![Sizing calculator with transparent planning inputs](images/sizing-calculator.png)
+
+Adjust the inputs to your real workload, especially measured time through download/scan/verified move, file sizes and retention. Open **Advanced disk and retention assumptions** and **Formulas and limits** to inspect the model. Calculator changes do not change profiles, delete history or configure hardware. Use the resulting concurrency as a starting point in **Scan profiles → Edit → Simultaneous scans** and ensure the shared engine worker cap is high enough. Profile settings above that cap do not create additional workers. Validate representative documents, large files/archives, retries and storage latency before treating this as a capacity commitment.
+
+These are application planning estimates, not vendor-certified requirements. Cloud scanner compute is hosted by Trend; local scanner compute must be sized separately using the scanner's own guidance. [File Security overview](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-what-is-file-security) · [Containerized scanner](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-file-security-containerized-scanner).

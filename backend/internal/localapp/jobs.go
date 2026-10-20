@@ -365,7 +365,7 @@ func (a *App) monitor(ctx context.Context) {
 	slots := make(chan struct{}, 4)
 	var monitors sync.WaitGroup
 	defer monitors.Wait()
-	lastRecovery := time.Now()
+	lastRecovery := time.Now().Add(-time.Minute)
 	defer ticker.Stop()
 	for {
 		select {
@@ -380,6 +380,7 @@ func (a *App) monitor(ctx context.Context) {
 				defer monitors.Done()
 				c, cancel := context.WithTimeout(ctx, 50*time.Second)
 				defer cancel()
+				a.reconcileHistorical(c)
 				a.recoverySweep(c)
 			}()
 		}

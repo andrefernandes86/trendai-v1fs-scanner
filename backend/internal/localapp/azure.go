@@ -94,14 +94,21 @@ func (m Mount) BlobClient(key, version string) (*blob.Client, error) {
 }
 
 type BlobEntry struct {
-	Key      string `json:"key"`
-	Size     int64  `json:"size"`
-	ETag     string `json:"etag"`
-	Modified string `json:"modified"`
-	Complete bool   `json:"complete"`
+	Tags                 map[string]string `json:"tags,omitempty"`
+	Metadata             map[string]string `json:"metadata,omitempty"`
+	TagsUnavailable      bool              `json:"tagsUnavailable,omitempty"`
+	ScanJobID            string            `json:"scanJobId,omitempty"`
+	Verdict              string            `json:"verdict,omitempty"`
+	Detections           []Detection       `json:"detections,omitempty"`
+	ScanResponseRecorded bool              `json:"scanResponseRecorded"`
+	Key                  string            `json:"key"`
+	Size                 int64             `json:"size"`
+	ETag                 string            `json:"etag"`
+	Modified             string            `json:"modified"`
+	Complete             bool              `json:"complete"`
 }
 
-func ListBlobs(ctx context.Context, m Mount, prefix, marker string) ([]BlobEntry, string, error) {
+func ListBlobs(ctx context.Context, m Mount, prefix, marker string, nativeTags ...bool) ([]BlobEntry, string, error) {
 	if m.Type() != "blob" {
 		return listShare(ctx, m, prefix, marker)
 	}
@@ -109,7 +116,8 @@ func ListBlobs(ctx context.Context, m Mount, prefix, marker string) ([]BlobEntry
 	if e != nil {
 		return nil, "", e
 	}
-	opts := &container.ListBlobsFlatOptions{Prefix: to.Ptr(m.Prefix + prefix), MaxResults: to.Ptr(int32(200)), Include: container.ListBlobsInclude{Metadata: true}}
+	wantTags := len(nativeTags) > 0 && nativeTags[0]
+	opts := &container.ListBlobsFlatOptions{Prefix: to.Ptr(m.Prefix + prefix), MaxResults: to.Ptr(int32(200)), Include: container.ListBlobsInclude{Metadata: true, Tags: wantTags}}
 	if marker != "" {
 		opts.Marker = &marker
 	}
@@ -119,6 +127,16 @@ func ListBlobs(ctx context.Context, m Mount, prefix, marker string) ([]BlobEntry
 		return out, "", nil
 	}
 	p, e := pager.NextPage(ctx)
+	tagsUnavailable := false
+	if e != nil {
+		var response *azcore.ResponseError
+		if wantTags && errors.As(e, &response) && response.StatusCode == 403 {
+			opts.Include.Tags = false
+			pager = c.NewListBlobsFlatPager(opts)
+			p, e = pager.NextPage(ctx)
+			tagsUnavailable = true
+		}
+	}
 	if e != nil {
 		return nil, "", e
 	}
@@ -126,7 +144,19 @@ func ListBlobs(ctx context.Context, m Mount, prefix, marker string) ([]BlobEntry
 		if b.Name == nil || b.Properties == nil || b.Properties.ETag == nil || b.Properties.ContentLength == nil {
 			continue
 		}
-		v := BlobEntry{Key: *b.Name, Size: *b.Properties.ContentLength, ETag: string(*b.Properties.ETag)}
+		v := BlobEntry{Tags: map[string]string{}, Metadata: map[string]string{}, TagsUnavailable: tagsUnavailable, Key: *b.Name, Size: *b.Properties.ContentLength, ETag: string(*b.Properties.ETag)}
+		for key, value := range b.Metadata {
+			if value != nil {
+				v.Metadata[key] = *value
+			}
+		}
+		if b.BlobTags != nil {
+			for _, tag := range b.BlobTags.BlobTagSet {
+				if tag.Key != nil && tag.Value != nil {
+					v.Tags[*tag.Key] = *tag.Value
+				}
+			}
+		}
 		if b.Properties.LastModified != nil {
 			v.Modified = b.Properties.LastModified.UTC().Format("2006-01-02T15:04:05Z")
 		}
