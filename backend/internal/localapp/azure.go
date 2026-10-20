@@ -30,6 +30,9 @@ var accountPattern = regexp.MustCompile(`^[a-z0-9]{3,24}$`)
 var containerPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$`)
 
 func (m *Mount) Validate() error {
+	if m.Type() != "blob" {
+		return m.validateShare()
+	}
 	if m.ResourceID != "" {
 		r := resourcePattern.FindStringSubmatch(m.ResourceID)
 		if r == nil {
@@ -59,6 +62,9 @@ func (m *Mount) Validate() error {
 	return nil
 }
 func (m Mount) BaseURL() string {
+	if m.Type() != "blob" {
+		return m.shareURL()
+	}
 	return fmt.Sprintf("https://%s.blob.core.windows.net/%s", m.Account, m.Container)
 }
 func (m Mount) ContainerClient() (*container.Client, error) {
@@ -95,6 +101,9 @@ type BlobEntry struct {
 }
 
 func ListBlobs(ctx context.Context, m Mount, prefix, marker string) ([]BlobEntry, string, error) {
+	if m.Type() != "blob" {
+		return listShare(ctx, m, prefix, marker)
+	}
 	c, e := m.ContainerClient()
 	if e != nil {
 		return nil, "", e
@@ -132,6 +141,9 @@ func ListBlobs(ctx context.Context, m Mount, prefix, marker string) ([]BlobEntry
 	return out, next, nil
 }
 func Download(ctx context.Context, s Snapshot, dir string) (name, digest string, err error) {
+	if s.Source.Type() != "blob" {
+		return downloadShare(ctx, s, dir)
+	}
 	if s.Size > 2<<30 {
 		return "", "", errors.New("file exceeds 2 GiB host policy")
 	}
@@ -165,6 +177,9 @@ func Download(ctx context.Context, s Snapshot, dir string) (name, digest string,
 	return f.Name(), hex.EncodeToString(h.Sum(nil)), nil
 }
 func Route(ctx context.Context, m Mount, key, path, digest, job, verdict string, size int64) error {
+	if m.Type() != "blob" {
+		return routeShare(ctx, m, key, path, digest, job, size)
+	}
 	c, e := m.ContainerClient()
 	if e != nil {
 		return e

@@ -105,6 +105,10 @@ func (a *App) storageTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m := input.Mount
+	if m.Type() != "blob" {
+		a.shareStorageTest(w, r, input.Kind, m, input.Marker)
+		return
+	}
 	if m.ResourceID != "" {
 		match := resourcePattern.FindStringSubmatch(m.ResourceID)
 		if match == nil {

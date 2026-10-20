@@ -34,7 +34,7 @@ func (a *App) ProfileSnapshot(id, key string) (Snapshot, error) {
 		return s, e
 	}
 	if !core.ValidKey(key) || !strings.HasPrefix(key, s.Source.Prefix+s.Profile.Prefix) {
-		return s, errors.New("blob is outside profile prefix")
+		return s, errors.New("file is outside profile prefix")
 	}
 	s.Key = key
 	return s, nil
@@ -47,37 +47,58 @@ func (a *App) enqueueExpected(ctx context.Context, id, key, expected string) (st
 	if e != nil {
 		return "", e
 	}
-	c, e := s.Source.BlobClient(key, "")
-	if e != nil {
-		return "", e
-	}
-	props, e := c.GetProperties(ctx, nil)
-	if e != nil {
-		return "", errors.New("cannot read blob properties; verify connection credentials and path")
-	}
-	if props.ETag == nil || props.ContentLength == nil {
-		return "", errors.New("blob has no stable identity")
-	}
-	s.ETag = string(*props.ETag)
-	if expected != "" && s.ETag != expected {
-		return "", errors.New("source changed during discovery; waiting for stability")
-	}
-	s.Size = *props.ContentLength
-	if s.Size > 2<<30 {
-		return "", errors.New("file exceeds 2 GiB host policy")
-	}
-	if props.VersionID != nil {
-		s.Version = *props.VersionID
-	}
-	if s.Profile.RequireMarker {
-		if p := props.Metadata["v1fs-complete"]; p == nil || *p != "true" {
-			return "", errors.New("profile requires v1fs-complete=true metadata on completed uploads")
+	if s.Source.Type() != "blob" {
+		info, e := shareProperties(ctx, s.Source, key)
+		if e != nil {
+			return "", errors.New("cannot read share file; check connection, path and permissions")
+		}
+		s.ETag = info.ETag
+		s.Size = info.Size
+		if expected != "" && s.ETag != expected {
+			return "", errors.New("file changed during discovery; waiting for stability")
+		}
+		if s.Profile.RequireMarker && !info.Complete {
+			return "", errors.New("profile requires a fresh filename.complete sidecar after upload completion")
+		}
+		if s.Size > 2<<30 {
+			return "", errors.New("file exceeds 2 GiB host policy")
+		}
+	} else {
+		c, e := s.Source.BlobClient(key, "")
+		if e != nil {
+			return "", e
+		}
+		props, e := c.GetProperties(ctx, nil)
+		if e != nil {
+			return "", errors.New("cannot read blob properties; verify connection credentials and path")
+		}
+		if props.ETag == nil || props.ContentLength == nil {
+			return "", errors.New("blob has no stable identity")
+		}
+		s.ETag = string(*props.ETag)
+		if expected != "" && s.ETag != expected {
+			return "", errors.New("source changed during discovery; waiting for stability")
+		}
+		s.Size = *props.ContentLength
+		if s.Size > 2<<30 {
+			return "", errors.New("file exceeds 2 GiB host policy")
+		}
+		if props.VersionID != nil {
+			s.Version = *props.VersionID
+		}
+		if s.Profile.RequireMarker {
+			if p := props.Metadata["v1fs-complete"]; p == nil || *p != "true" {
+				return "", errors.New("profile requires v1fs-complete=true metadata on completed uploads")
+			}
 		}
 	}
 	return a.insertJob(s)
 }
 func (a *App) insertJob(s Snapshot) (string, error) {
-	encoded, _ := json.Marshal([]any{s.Profile.ID, s.Profile.Revision, s.Source.Account, s.Source.Container, s.Key, s.ETag, s.Version})
+	encoded, _ := json.Marshal([]any{s.Profile.ID, s.Profile.Revision, s.Source.BaseURL(), s.Key, s.ETag, s.Version})
+	if s.Source.Type() == "blob" {
+		encoded, _ = json.Marshal([]any{s.Profile.ID, s.Profile.Revision, s.Source.Account, s.Source.Container, s.Key, s.ETag, s.Version})
+	}
 	h := sha256.Sum256(encoded)
 	id := hex.EncodeToString(h[:])
 	payload, e := a.Seal(s)

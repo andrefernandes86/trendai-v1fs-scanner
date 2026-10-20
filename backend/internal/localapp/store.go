@@ -28,6 +28,15 @@ type App struct {
 	wake            chan struct{}
 }
 type Mount struct {
+	Kind            string `json:"kind"`
+	Server          string `json:"server"`
+	Share           string `json:"share"`
+	Username        string `json:"username"`
+	Domain          string `json:"domain"`
+	Export          string `json:"export"`
+	UID             uint32 `json:"uid"`
+	GID             uint32 `json:"gid"`
+	Port            int    `json:"port"`
 	ID              string `json:"id"`
 	Name            string `json:"name"`
 	ResourceID      string `json:"resourceId"`

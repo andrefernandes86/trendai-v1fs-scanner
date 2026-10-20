@@ -1,16 +1,16 @@
 # trendai-v1fs-scanner
 
-A host-based Azure Blob scanner with a React management console and the official Trend Vision One File Security Go SDK. The console and Go API run together. There is no external gateway, Event Grid, Service Bus, Azure deployment, or Entra setup requirement.
+A host-based Azure Blob, Azure Files, SMB and NFSv3 scanner with a React management console and the official Trend Vision One File Security Go SDK. The console and Go API run together. There is no external gateway, Event Grid, Service Bus, Azure deployment, or Entra setup requirement.
 
 ## Console workflow
 
 1. Open the host URL and create the administrator password on first use.
-2. **Blob connections:** mount multiple containers using an account/container name or full Azure container resource ID. Choose storage account key or SAS token authentication. Credentials are encrypted on the host and omitted from API responses. Test and browse each saved connection.
+2. **Storage connections:** choose Azure Blob, Azure Files, SMB or NFSv3. Azure uses account keys/SAS, SMB uses username/password/domain, and NFSv3 uses server/export plus UID/GID. Credentials are encrypted on the host and omitted from API responses. Test and browse each saved connection.
 3. **Vision One config:** enter the API key. Choose **Cloud** and its region, or **Local** and the existing File Security gRPC service's `host:port`. Local TLS is configurable; certificate verification stays enabled with TLS.
 4. **Scan profiles:** create multiple profiles, each with a source connection and separate good-file and bad-file destination connections/prefixes. Set detection options and optional automatic monitoring.
-5. **Storage explorer:** list real Azure objects, select a profile and up to 100 files, then submit scans. Follow verdicts and verified destinations in **File activity**.
+5. **Storage explorer:** browse real containers and shares, select a profile and up to 100 files, then submit scans. Follow verdicts and verified destinations in **File activity**.
 
-Source, clean, and quarantine must be different containers. No automatic source deletion occurs. Unverified results stay HELD and never go to the good-file destination. Automatic monitoring runs every 30 seconds with stability observations and optional required `v1fs-complete=true` upload metadata. The default profile requires the marker, including for manual requests; disable that option only if your producer's committed-upload contract is suitable.
+Source, clean, and quarantine must be distinct containers or non-overlapping shares/exports. No automatic source deletion occurs. Unverified results stay HELD and never go to the good-file destination. Automatic monitoring runs every 30 seconds with stability observations and optional required `v1fs-complete=true` upload metadata for Blob or a fresh `filename.complete` sidecar for shares. The default profile requires the marker, including for manual requests; disable that option only if your producer's committed-upload contract is suitable.
 
 ## Run directly
 

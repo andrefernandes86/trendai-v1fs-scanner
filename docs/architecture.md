@@ -1,6 +1,6 @@
-# Host-based Blob scanning
+# Host-based storage scanning
 
-The earlier Azure gateway design was removed from the active application at the user's request. The Go host process serves both the React console and a same-origin authenticated API. It connects directly to Azure Blob Storage and to the selected Vision One scanner. Azure infrastructure provisioning and Entra identity are no longer required.
+The earlier Azure gateway design was removed from the active application at the user's request. The Go host process serves both the React console and a same-origin authenticated API. It connects directly to the configured storage and selected Vision One scanner. Azure infrastructure provisioning and Entra identity are no longer required.
 
 ## Configuration and secrets
 
@@ -32,4 +32,16 @@ Cloud mode uses the official Go SDK with direct Vision One connectivity and a se
 
 ## Limits
 
-This is a single-host service, not a distributed Azure gateway. Worker autoscaling, Microsoft Entra, Azure Files, automatic source deletion, retention enforcement, SDK quarantine encoding, alerts and arbitrary file downloads are outside the revised implementation. The telemetry reflects actual local job states. Live Azure credential tests and scans require user configuration; automated routing tests use controlled fixtures and do not measure Vision One throughput.
+This is a single-host service, not a distributed Azure gateway. Worker autoscaling, Microsoft Entra, automatic source deletion, retention enforcement, SDK quarantine encoding, alerts and arbitrary file downloads are outside the revised implementation. The telemetry reflects actual local job states. Live Azure credential tests and scans require user configuration; automated routing tests use controlled fixtures and do not measure Vision One throughput.
+
+## Azure Files, SMB and NFSv3 connections
+
+Storage connections now support `blob` (the default for existing records), `azureFiles`, `smb` and `nfs`. Explorer, profile selection, readiness checks, queue snapshots, download and routing dispatch through the selected adapter. Blob identities remain backward-compatible so this upgrade does not queue already processed Blob versions again.
+
+Azure Files uses the official Azure Files HTTPS SDK with account keys or SAS tokens, including share discovery and file/directory operations. SMB uses a direct SMB2/3 client with NTLMv2 username/password authentication and required message signing; domain and TCP port are configurable. NFS uses NFSv3 TCP RPC with AUTH_SYS UID/GID, rpcbind discovery and explicit export paths. RPC framing and opaque lengths are bounded and calls honor context/deadlines. No shell commands, kernel mounts or root privileges are used. NFSv4, Kerberos, SMB1 and transparent cross-share symlinks are not supported. Servers requiring NFS reserved-source ports are not supported by the unprivileged client.
+
+Shares use a fresh `filename.complete` sidecar when upload-completion enforcement is selected; create it after closing the file, with a modification time at least as recent as the file. Automatic scans also require stable observations and file age. Share identity checks use Azure Files ETags or file identity/change metadata for NFS and size/mtime/mode for SMB. SMB/NFS cannot provide Blob-style immutable version guarantees; download checks metadata before/after and routing uses exactly the captured bytes inspected by the scanner. Producers must avoid rewriting files without updating their metadata or completion markers.
+
+Share routing first uploads into `.v1fs-staging`, verifies SHA-256, then publishes without replacing existing destinations: Azure Files rename with ReplaceIfExists=false, SMB no-replace rename, NFS hard link. It verifies the final content again. NFS destinations must support hard links within the selected export/filesystem. Failed network operations can leave hidden staging files for administrative cleanup. Existing destination mismatches are held rather than overwritten. Symlinks and nonregular sources are excluded. Connection roots must be distinct; overlapping NFS exports and Azure Files/SMB aliases to the same Azure share are rejected in a profile. Other server aliases or cross-protocol aliases cannot be inferred automatically and must not refer to overlapping source/destination storage.
+
+Azure Files test details show actual HTTP traffic with credentials redacted. SMB/NFS diagnostics show protocol-operation summaries and actual results/errors; they are not packet captures. Discovery may be denied even when a manually specified share/export is accessible. Cross-protocol routing is supported.

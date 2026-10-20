@@ -74,6 +74,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /api/mounts/{id}/test", a.mountTest)
 	mux.HandleFunc("POST /api/storage/test", a.storageTest)
 	mux.HandleFunc("GET /api/mounts/{id}/blobs", a.blobs)
+	mux.HandleFunc("GET /api/mounts/{id}/files", a.blobs)
 	mux.HandleFunc("GET /api/profiles", a.profiles)
 	mux.HandleFunc("PUT /api/profiles/{id}", a.profileSave)
 	mux.HandleFunc("DELETE /api/profiles/{id}", func(w http.ResponseWriter, r *http.Request) { a.remove(w, r, "profiles") })
@@ -225,7 +226,7 @@ func (a *App) mountSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var old Mount
-	if a.Get("mounts", m.ID, &old) == nil && m.Secret == "" && m.AuthType == old.AuthType && m.Account == old.Account && m.ResourceID == old.ResourceID {
+	if a.Get("mounts", m.ID, &old) == nil && m.Secret == "" && m.AuthType == old.AuthType && sameCredentialTarget(m, old) {
 		m.Secret = old.Secret
 	}
 	if e := m.Validate(); e != nil {
@@ -273,10 +274,10 @@ func (a *App) mountTest(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	_, _, e := ListBlobs(ctx, m, "", "")
 	if e != nil {
-		problem(w, 502, "Azure connection failed. Check account, container, credentials, network, and list permissions.")
+		problem(w, 502, "Storage connection failed. Check endpoint, share/container, credentials, network, and read/list permissions.")
 		return
 	}
-	respond(w, 200, map[string]string{"status": "Connected", "detail": "Container listing verified. Destination write permission is checked during routing."})
+	respond(w, 200, map[string]string{"status": "Connected", "detail": "Storage listing verified. Destination write permission is checked during routing."})
 }
 func (a *App) blobs(w http.ResponseWriter, r *http.Request) {
 	var m Mount
@@ -288,7 +289,7 @@ func (a *App) blobs(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	files, next, e := ListBlobs(ctx, m, r.URL.Query().Get("prefix"), r.URL.Query().Get("marker"))
 	if e != nil {
-		problem(w, 502, "Cannot list Azure blobs. Test this connection and check permissions.")
+		problem(w, 502, "Cannot list files. Test this storage connection and check permissions.")
 		return
 	}
 	respond(w, 200, map[string]any{"files": files, "nextMarker": next})
@@ -319,14 +320,14 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 	var mounts [3]Mount
 	for i, id := range []string{p.SourceMount, p.GoodMount, p.BadMount} {
 		if a.Get("mounts", id, &mounts[i]) != nil {
-			problem(w, 400, "Select existing source, clean, and malicious container connections.")
+			problem(w, 400, "Select existing source, clean, and malicious storage connections.")
 			return
 		}
 	}
 	for i := 0; i < 3; i++ {
 		for j := i + 1; j < 3; j++ {
-			if mounts[i].BaseURL() == mounts[j].BaseURL() {
-				problem(w, 400, "Source, clean, and malicious destinations must use distinct containers.")
+			if sameStorageRoot(mounts[i], mounts[j]) {
+				problem(w, 400, "Source, clean, and malicious destinations must use distinct containers or shares.")
 				return
 			}
 		}
