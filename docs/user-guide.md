@@ -282,3 +282,7 @@ Open **Audit log** to see saved configuration changes, processing decisions and 
 Archive settings: **Maximum archive entries** defaults to **10** and accepts **10–100**. The count is shared across all archive layers, including directories and nested archive members.
 
 Result tags automatically include `scan-failed=true` and `scanned=false` for incomplete archive inspections or unknown scans routed after exhausted retries. Incomplete archives with detected malware retain their malicious verdict and quarantine routing. Complete clean/malicious scans receive `scan-failed=false`. Azure Blob stores native tags; shares store JSON sidecars. Existing destination objects are not retroactively retagged.
+
+When scan, download or copy retries are exhausted, the record is held with `scan-failed=true` and `failure-stage`. The retained source receives these labels as native Blob tags or a share JSON sidecar, after a source-version check. Existing Blob tags are preserved. If storage access, tag capacity, or source identity prevents annotation, record details explicitly report that the source tag could not be written. A copy failure does not erase a confirmed scan verdict or remove the source.
+
+Failed-file recovery reaffirms `scan-failed=true` when the result remains unknown. The file remains in its isolated Scan failed storage location, including a scanner-managed claim on shares, instead of being copied back into the input or promoted to Safe files. Exhausting recovery cycles leaves it held for manual review.

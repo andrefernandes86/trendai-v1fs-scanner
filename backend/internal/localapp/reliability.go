@@ -89,6 +89,12 @@ func (a *App) retryStage(id, stage string, p Profile, verdict, digest, dest, mes
 	if n >= limit {
 		state = "HELD"
 		message += " Retry budget exhausted; operator action required."
+		if stage == "scan" || stage == "transfer" || stage == "download" {
+			message += " scan-failed=true; failure-stage=" + stage + "."
+			if err := a.tagExhaustedSource(id, stage, verdict); err != nil {
+				message += " Source failure tag could not be written; storage access or source identity needs review."
+			}
+		}
 	}
 	delay := time.Duration(defaultInt(p.RetryBaseSeconds, 10)*(1<<min(n-1, 8))) * time.Second
 	delay = min(delay, time.Hour)
@@ -229,7 +235,11 @@ func (a *App) routeCaptured(ctx context.Context, id string, s Snapshot, local, d
 }
 func (a *App) routeCapturedNow(ctx context.Context, id string, s Snapshot, local, digest, verdict, rule, reason string) {
 	if verdict == "UNKNOWN" && sameStorageRoot(s.Source, s.Failed) {
-		_ = a.transition(id, "HELD", "UNKNOWN", digest, s.Source.BaseURL()+"/"+s.Key, reason+" Recovery result still unknown; isolated source retained.", 0)
+		message := reason + " Recovery result still unknown; isolated source retained. scan-failed=true."
+		if err := a.tagExhaustedSource(id, "scan", verdict); err != nil {
+			message += " Source failure tag could not be written; storage access or source identity needs review."
+		}
+		_ = a.transition(id, "HELD", "UNKNOWN", digest, s.Source.BaseURL()+"/"+s.sourceKey(), message, 0)
 		return
 	}
 	sha, crc, n, e := s.CaptureSHA, s.CaptureCRC, s.Size, error(nil)

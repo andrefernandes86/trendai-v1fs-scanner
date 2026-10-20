@@ -244,7 +244,7 @@ func listShare(ctx context.Context, m Mount, prefix, marker string) ([]BlobEntry
 			return left < right
 		})
 		for _, item := range items {
-			if item.Name() == "." || item.Name() == ".." || (item.Name() == ".v1fs-staging" || item.Name() == ".v1fs-claims") || strings.HasSuffix(item.Name(), ".complete") || !validShareName(item.Name()) || item.Mode()&os.ModeSymlink != 0 {
+			if item.Name() == "." || item.Name() == ".." || (item.Name() == ".v1fs-staging" || item.Name() == ".v1fs-claims") || strings.HasSuffix(item.Name(), ".complete") || strings.HasSuffix(item.Name(), ".v1fs-tags.json") || !validShareName(item.Name()) || item.Mode()&os.ModeSymlink != 0 {
 				continue
 			}
 			key := path.Join(dir, item.Name())
