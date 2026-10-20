@@ -105,6 +105,17 @@ func (a *App) storageTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m := input.Mount
+	// A blank target tests account/server access by discovering available locations.
+	target := m.Container
+	switch m.Type() {
+	case "azureFiles", "smb":
+		target = m.Share
+	case "nfs":
+		target = m.Export
+	}
+	if strings.TrimSpace(target) == "" && strings.TrimSpace(m.ResourceID) == "" {
+		input.Kind = "containers"
+	}
 	if m.Type() != "blob" {
 		a.shareStorageTest(w, r, input.Kind, m, input.Marker)
 		return

@@ -513,6 +513,16 @@ func TestStorageDiscoveryAndDraftContainerDiagnostics(t *testing.T) {
 	if n != 0 {
 		t.Fatal("draft test persisted credentials")
 	}
+	// Testing a blank target must discover containers instead of rejecting the form.
+	body, _ = json.Marshal(map[string]any{"kind": "container", "mount": m})
+	w = httptest.NewRecorder()
+	a.storageTest(w, httptest.NewRequest("POST", "http://localhost/api/storage/test", bytes.NewReader(body)))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"kind":"containers"`) || !strings.Contains(w.Body.String(), `"success":true`) {
+		t.Fatal(w.Body.String())
+	}
+	if strings.Contains(fixture.lastURL, "restype=container") || strings.Contains(fixture.lastURL, "/discovery") {
+		t.Fatal("blank-target discovery requested a container instead of the account")
+	}
 	fixture.body = `<?xml version="1.0" encoding="utf-8"?><EnumerationResults ServiceEndpoint="https://testaccount.blob.core.windows.net/" ContainerName="incoming"><Blobs/><NextMarker/></EnumerationResults>`
 	m.Container = "incoming"
 	body, _ = json.Marshal(map[string]any{"kind": "container", "mount": m})
