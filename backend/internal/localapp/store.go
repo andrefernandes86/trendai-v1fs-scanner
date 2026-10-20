@@ -56,22 +56,26 @@ type Scanner struct {
 	TLS      bool   `json:"tls"`
 }
 type Profile struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	SourceMount   string `json:"sourceMount"`
-	Prefix        string `json:"prefix"`
-	GoodMount     string `json:"goodMount"`
-	GoodPrefix    string `json:"goodPrefix"`
-	BadMount      string `json:"badMount"`
-	BadPrefix     string `json:"badPrefix"`
-	Enabled       bool   `json:"enabled"`
-	RequireMarker bool   `json:"requireMarker"`
-	PML           bool   `json:"pml"`
-	ActiveContent bool   `json:"activeContent"`
-	Feedback      bool   `json:"feedback"`
-	Verbose       bool   `json:"verbose"`
-	Digest        bool   `json:"digest"`
-	Revision      int64  `json:"revision"`
+	ScanIntervalSeconds int    `json:"scanIntervalSeconds"`
+	ScannedTags         string `json:"scannedTags"`
+	CleanTags           string `json:"cleanTags"`
+	MaliciousTags       string `json:"maliciousTags"`
+	ID                  string `json:"id"`
+	Name                string `json:"name"`
+	SourceMount         string `json:"sourceMount"`
+	Prefix              string `json:"prefix"`
+	GoodMount           string `json:"goodMount"`
+	GoodPrefix          string `json:"goodPrefix"`
+	BadMount            string `json:"badMount"`
+	BadPrefix           string `json:"badPrefix"`
+	Enabled             bool   `json:"enabled"`
+	RequireMarker       bool   `json:"requireMarker"`
+	PML                 bool   `json:"pml"`
+	ActiveContent       bool   `json:"activeContent"`
+	Feedback            bool   `json:"feedback"`
+	Verbose             bool   `json:"verbose"`
+	Digest              bool   `json:"digest"`
+	Revision            int64  `json:"revision"`
 }
 type Snapshot struct {
 	Source             Mount   `json:"source"`

@@ -311,6 +311,19 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 		problem(w, 400, "A profile ID and name are required.")
 		return
 	}
+	if p.ScanIntervalSeconds == 0 {
+		p.ScanIntervalSeconds = 30
+	}
+	if p.ScanIntervalSeconds < 10 || p.ScanIntervalSeconds > 86400 {
+		problem(w, 400, "Scan frequency must be between 10 and 86400 seconds.")
+		return
+	}
+	for _, verdict := range []string{"CLEAN", "MALICIOUS"} {
+		if _, err := p.ResultTags(verdict); err != nil {
+			problem(w, 400, err.Error())
+			return
+		}
+	}
 	for _, s := range []string{p.Prefix, p.GoodPrefix, p.BadPrefix} {
 		if s != "" && !core.ValidKey(s) {
 			problem(w, 400, "Invalid path prefix.")

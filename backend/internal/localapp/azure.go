@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -176,9 +177,32 @@ func Download(ctx context.Context, s Snapshot, dir string) (name, digest string,
 	}
 	return f.Name(), hex.EncodeToString(h.Sum(nil)), nil
 }
-func Route(ctx context.Context, m Mount, key, path, digest, job, verdict string, size int64) error {
+func Route(ctx context.Context, m Mount, key, path, digest, job, verdict string, size int64, tagSets ...map[string]string) error {
 	if m.Type() != "blob" {
-		return routeShare(ctx, m, key, path, digest, job, size)
+		if err := routeShare(ctx, m, key, path, digest, job, size); err != nil {
+			return err
+		}
+		if len(tagSets) == 0 || len(tagSets[0]) == 0 {
+			return nil
+		}
+		data, err := json.Marshal(map[string]any{"tags": tagSets[0], "verdict": verdict, "sha256": digest, "scanner": "Vision One File Security"})
+		if err != nil {
+			return err
+		}
+		f, err := os.CreateTemp("", "v1fs-tags-*")
+		if err != nil {
+			return err
+		}
+		defer os.Remove(f.Name())
+		if _, err = f.Write(data); err != nil {
+			f.Close()
+			return err
+		}
+		if err = f.Close(); err != nil {
+			return err
+		}
+		sum := sha256.Sum256(data)
+		return routeShare(ctx, m, key+".v1fs-tags.json", f.Name(), hex.EncodeToString(sum[:]), job, int64(len(data)))
 	}
 	c, e := m.ContainerClient()
 	if e != nil {
@@ -209,6 +233,12 @@ func Route(ctx context.Context, m Mount, key, path, digest, job, verdict string,
 	}
 	if n != size || hex.EncodeToString(h.Sum(nil)) != digest {
 		return errors.New("destination digest verification failed")
+	}
+	if len(tagSets) > 0 && len(tagSets[0]) > 0 {
+		_, e = target.SetTags(ctx, tagSets[0], nil)
+		if e != nil {
+			return e
+		}
 	}
 	return nil
 }

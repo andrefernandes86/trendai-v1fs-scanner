@@ -267,14 +267,20 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 	if e = a.transition(id, "ROUTING", verdict, digest, "", "", 0); e != nil {
 		return
 	}
-	if e = Route(ctx, dest, fullKey, path, digest, id, verdict, s.Size); e != nil {
+	tags, e := s.Profile.ResultTags(verdict)
+	if e != nil {
+		fail(e.Error())
+		return
+	}
+	if e = Route(ctx, dest, fullKey, path, digest, id, verdict, s.Size, tags); e != nil {
 		fail("Destination copy or SHA-256 verification failed. Original file preserved.")
 		return
 	}
 	_ = a.transition(id, state, verdict, digest, dest.BaseURL()+"/"+fullKey, "", 0)
 }
 func (a *App) monitor(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(time.Second)
+	lastRun := map[string]time.Time{}
 	defer ticker.Stop()
 	for {
 		select {
@@ -291,6 +297,10 @@ func (a *App) monitor(ctx context.Context) {
 			if json.Unmarshal(raw, &p) != nil || !p.Enabled {
 				continue
 			}
+			if last, ok := lastRun[p.ID]; ok && time.Since(last) < p.Interval() {
+				continue
+			}
+			lastRun[p.ID] = time.Now()
 			var m Mount
 			if a.Get("mounts", p.SourceMount, &m) != nil {
 				continue
