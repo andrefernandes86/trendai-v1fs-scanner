@@ -20,16 +20,18 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 var storageTransport policy.Transporter
 var idPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+var resourcePattern = regexp.MustCompile(`(?i)/storageAccounts/([^/]+)/blobServices/default/containers/([^/]+)$`)
 var accountPattern = regexp.MustCompile(`^[a-z0-9]{3,24}$`)
 var containerPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$`)
 
 func (m *Mount) Validate() error {
 	if m.ResourceID != "" {
-		r := regexp.MustCompile(`(?i)/storageAccounts/([^/]+)/blobServices/default/containers/([^/]+)$`).FindStringSubmatch(m.ResourceID)
+		r := resourcePattern.FindStringSubmatch(m.ResourceID)
 		if r == nil {
 			return errors.New("use the full Azure container resource ID")
 		}
@@ -227,7 +229,13 @@ func (a *App) Scan(ctx context.Context, path string, s Scanner, p Profile) ([]by
 	if a.scanFn != nil {
 		return a.scanFn(ctx, path, s, p)
 	}
-	a.scanMu.Lock()
+	for !a.scanMu.TryLock() {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
 	defer a.scanMu.Unlock()
 	names := []string{"TM_AM_SERVER_ADDR", "TM_AM_DISABLE_TLS", "TM_AM_DISABLE_CERT_VERIFY", "TM_AM_AUTH_KEY_NOT_REQUIRED", "TM_AM_AUTH_KEY"}
 	old := map[string]*string{}

@@ -72,12 +72,14 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/mounts/{id}", a.mountSave)
 	mux.HandleFunc("DELETE /api/mounts/{id}", a.mountDelete)
 	mux.HandleFunc("POST /api/mounts/{id}/test", a.mountTest)
+	mux.HandleFunc("POST /api/storage/test", a.storageTest)
 	mux.HandleFunc("GET /api/mounts/{id}/blobs", a.blobs)
 	mux.HandleFunc("GET /api/profiles", a.profiles)
 	mux.HandleFunc("PUT /api/profiles/{id}", a.profileSave)
 	mux.HandleFunc("DELETE /api/profiles/{id}", func(w http.ResponseWriter, r *http.Request) { a.remove(w, r, "profiles") })
 	mux.HandleFunc("GET /api/scanner", a.scannerGet)
 	mux.HandleFunc("PUT /api/scanner", a.scannerSave)
+	mux.HandleFunc("POST /api/scanner/test", a.scannerTest)
 	mux.HandleFunc("POST /api/scan", a.scan)
 	mux.HandleFunc("GET /api/jobs", func(w http.ResponseWriter, r *http.Request) {
 		j, e := a.Jobs()
@@ -367,10 +369,7 @@ func (a *App) scannerSave(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &s) {
 		return
 	}
-	var old Scanner
-	if a.Get("scanner", "default", &old) == nil && s.APIKey == "" && s.Type == old.Type && ((s.Type == "cloud" && s.Region == old.Region) || (s.Type == "local" && s.Address == old.Address)) {
-		s.APIKey = old.APIKey
-	}
+	s = a.resolveScanner(s)
 	if e := s.Validate(); e != nil {
 		problem(w, 400, e.Error())
 		return

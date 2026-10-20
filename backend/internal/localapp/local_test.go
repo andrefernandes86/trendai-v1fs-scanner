@@ -3,7 +3,9 @@ package localapp
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -359,5 +361,191 @@ func TestMultipleProfileDestinationsAndContainerIsolation(t *testing.T) {
 	var saved Profile
 	if e = a.Get("profiles", "policy1", &saved); e != nil || saved.GoodPrefix != "approved/1" || saved.BadPrefix != "blocked/1" {
 		t.Fatal("profile destinations lost")
+	}
+}
+
+func TestDiagnosticsEICARAndCredentialRedaction(t *testing.T) {
+	a := testApp(t)
+	secret := "private-diagnostic-api-key"
+	if e := a.Save("scanner", "default", Scanner{Type: "cloud", Region: "us-east-1", APIKey: secret, TLS: true}); e != nil {
+		t.Fatal(e)
+	}
+	var path string
+	a.scanFn = func(ctx context.Context, p string, s Scanner, profile Profile) ([]byte, error) {
+		path = p
+		if s.APIKey != secret {
+			t.Fatal("stored key not used")
+		}
+		b, e := os.ReadFile(p)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if len(b) != 68 || string(b) != eicarContent {
+			t.Fatal("incorrect EICAR bytes")
+		}
+		h := sha256.Sum256(b)
+		if hex.EncodeToString(h[:]) != "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f" {
+			t.Fatal("noncanonical EICAR hash")
+		}
+		if !profile.Digest {
+			t.Fatal("digest disabled")
+		}
+		return []byte(`{"scanId":"diagnostic","scanResult":1,"apiKey":"` + secret + `","nested":{"authorization":"Bearer sensitive","echo":"` + secret + `"}}`), nil
+	}
+	r := httptest.NewRequest("POST", "http://localhost/api/scanner/test", strings.NewReader(`{"kind":"eicar","scanner":{"type":"cloud","region":"us-east-1","tls":true}}`))
+	w := httptest.NewRecorder()
+	a.scannerTest(w, r)
+	if w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), secret) || strings.Contains(w.Body.String(), "Bearer sensitive") {
+		t.Fatal("diagnostic leaked a credential")
+	}
+	var v map[string]any
+	if json.Unmarshal(w.Body.Bytes(), &v) != nil || v["success"] != true {
+		t.Fatal(w.Body.String())
+	}
+	if _, e := os.Stat(path); !os.IsNotExist(e) {
+		t.Fatal("diagnostic file not removed")
+	}
+	var n int
+	a.DB.QueryRow("SELECT count(*) FROM jobs").Scan(&n)
+	if n != 0 {
+		t.Fatal("diagnostic added a routable job")
+	}
+	r = httptest.NewRequest("POST", "http://localhost/api/scanner/test", strings.NewReader(`{"kind":"eicar","scanner":{"type":"cloud","region":"us-east-1"}}`))
+	w = httptest.NewRecorder()
+	a.Handler().ServeHTTP(w, r)
+	if w.Code != 401 {
+		t.Fatal("diagnostic accessible without authentication")
+	}
+}
+func TestDiagnosticErrorsAndUnexpectedResults(t *testing.T) {
+	a := testApp(t)
+	for _, test := range []struct {
+		name, kind, raw string
+		err             error
+	}{{"auth error", "key", "", fmt.Errorf("authentication rejected secret-key")}, {"EICAR unexpectedly clean", "eicar", `{"scanId":"x","scanResult":0}`, nil}, {"unknown response", "key", `{}`, nil}, {"benign key check", "key", `{"scanId":"x","scanResult":0}`, nil}} {
+		t.Run(test.name, func(t *testing.T) {
+			a.scanFn = func(_ context.Context, path string, _ Scanner, _ Profile) ([]byte, error) {
+				b, e := os.ReadFile(path)
+				if e != nil {
+					t.Fatal(e)
+				}
+				if test.kind == "key" && bytes.Contains(b, []byte("EICAR")) {
+					t.Fatal("key test is not benign")
+				}
+				return []byte(test.raw), test.err
+			}
+			r := httptest.NewRequest("POST", "http://localhost/api/scanner/test", strings.NewReader(`{"kind":"`+test.kind+`","scanner":{"type":"cloud","region":"us-east-1","apiKey":"secret-key"}}`))
+			w := httptest.NewRecorder()
+			a.scannerTest(w, r)
+			if w.Code != 200 {
+				t.Fatal(w.Body.String())
+			}
+			if strings.Contains(w.Body.String(), "secret-key") {
+				t.Fatal("error exposed API key")
+			}
+			var out map[string]any
+			json.Unmarshal(w.Body.Bytes(), &out)
+			want := test.name == "benign key check"
+			if out["success"] != want {
+				t.Fatal(w.Body.String())
+			}
+		})
+	}
+}
+
+func TestDiagnosticScanSlotHonorsCancellation(t *testing.T) {
+	a := testApp(t)
+	a.scanMu.Lock()
+	defer a.scanMu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, e := a.Scan(ctx, "unused", Scanner{}, Profile{})
+	if e != context.DeadlineExceeded {
+		t.Fatalf("waiting scan ignored timeout: %v", e)
+	}
+}
+
+type storageDiagnosticFixture struct {
+	code      int
+	body      string
+	lastURL   string
+	signature string
+}
+
+func (f *storageDiagnosticFixture) Do(r *http.Request) (*http.Response, error) {
+	f.lastURL = r.URL.String()
+	auth := r.Header.Get("Authorization")
+	if i := strings.LastIndex(auth, ":"); i >= 0 {
+		f.signature = auth[i+1:]
+	}
+	body := strings.ReplaceAll(f.body, "AUTH_SIGNATURE", f.signature)
+	return &http.Response{StatusCode: f.code, Header: http.Header{"Content-Type": []string{"application/xml"}, "X-Ms-Request-Id": []string{"fixture-request"}, "X-Ms-Error-Code": []string{"AuthenticationFailed"}}, Body: io.NopCloser(strings.NewReader(body)), ContentLength: int64(len(body)), Request: r}, nil
+}
+func TestStorageDiscoveryAndDraftContainerDiagnostics(t *testing.T) {
+	a := testApp(t)
+	fixture := &storageDiagnosticFixture{code: 200, body: `<?xml version="1.0" encoding="utf-8"?><EnumerationResults ServiceEndpoint="https://testaccount.blob.core.windows.net/"><Containers><Container><Name>incoming</Name></Container><Container><Name>clean</Name></Container><Container><Name>quarantine</Name></Container></Containers><NextMarker>next-page</NextMarker></EnumerationResults>`}
+	storageTransport = fixture
+	t.Cleanup(func() { storageTransport = nil })
+	m := testMount("draft", "unused")
+	m.Container = ""
+	body, _ := json.Marshal(map[string]any{"kind": "containers", "mount": m})
+	w := httptest.NewRecorder()
+	a.storageTest(w, httptest.NewRequest("POST", "http://localhost/api/storage/test", bytes.NewReader(body)))
+	if w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	var out struct {
+		Success    bool     `json:"success"`
+		Containers []string `json:"containers"`
+		Next       string   `json:"nextMarker"`
+	}
+	if json.Unmarshal(w.Body.Bytes(), &out) != nil || !out.Success || len(out.Containers) != 3 || out.Containers[0] != "incoming" || out.Next != "next-page" {
+		t.Fatal(w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), m.Secret) || strings.Contains(w.Body.String(), fixture.signature) {
+		t.Fatal("credential or request signature leaked")
+	}
+	var n int
+	a.DB.QueryRow("SELECT count(*) FROM config WHERE kind='mounts'").Scan(&n)
+	if n != 0 {
+		t.Fatal("draft test persisted credentials")
+	}
+	fixture.body = `<?xml version="1.0" encoding="utf-8"?><EnumerationResults ServiceEndpoint="https://testaccount.blob.core.windows.net/" ContainerName="incoming"><Blobs/><NextMarker/></EnumerationResults>`
+	m.Container = "incoming"
+	body, _ = json.Marshal(map[string]any{"kind": "container", "mount": m})
+	w = httptest.NewRecorder()
+	a.storageTest(w, httptest.NewRequest("POST", "http://localhost/api/storage/test", bytes.NewReader(body)))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"success":true`) {
+		t.Fatal(w.Body.String())
+	}
+	if !strings.Contains(fixture.lastURL, "/incoming?") {
+		t.Fatal("container test did not target selected container")
+	}
+}
+func TestStorageDiagnosticSASFailureRedaction(t *testing.T) {
+	a := testApp(t)
+	fixture := &storageDiagnosticFixture{code: 403, body: `<?xml version="1.0"?><Error><Code>AuthenticationFailed</Code><Message>Denied sig=private-signature</Message></Error>`}
+	storageTransport = fixture
+	t.Cleanup(func() { storageTransport = nil })
+	m := Mount{ID: "draft", Name: "Draft", Account: "testaccount", Container: "incoming", AuthType: "sas", Secret: "sv=2023-11-03&sp=rl&sig=private-signature"}
+	body, _ := json.Marshal(map[string]any{"kind": "container", "mount": m})
+	w := httptest.NewRecorder()
+	a.storageTest(w, httptest.NewRequest("POST", "http://localhost/api/storage/test", bytes.NewReader(body)))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"success":false`) || !strings.Contains(w.Body.String(), `"statusCode":403`) {
+		t.Fatal(w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "private-signature") || strings.Contains(w.Body.String(), m.Secret) {
+		t.Fatal("SAS exposed in diagnostic output")
+	}
+	if !strings.Contains(fixture.lastURL, "sig=private-signature") {
+		t.Fatal("SAS was not used for actual request")
+	}
+	w = httptest.NewRecorder()
+	a.Handler().ServeHTTP(w, httptest.NewRequest("POST", "http://localhost/api/storage/test", bytes.NewReader(body)))
+	if w.Code != 401 {
+		t.Fatal("storage diagnostic lacks authentication")
 	}
 }

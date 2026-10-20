@@ -33,3 +33,17 @@ Run `go test -race ./...` and `go vet ./...` in backend, plus `npm run build --p
 - Unknown verdicts: the service fails closed. Unsupported verbose-engine formats require review rather than automatic clean routing.
 - Routing failures: confirm destination credentials, private container access and free host disk. The source remains preserved.
 - Credentials changed: existing jobs use their original snapshot. Save a profile revision and submit again for a new credential/destination snapshot; do not force a job to clean.
+
+## Scanner diagnostics
+
+Vision One config offers **Test API key** and **Generate & scan EICAR**. Tests use the form's current endpoint and entered key, or the stored key only when the endpoint matches. Tests do not save draft settings. The key test scans a small benign text file because the SDK has no authentication-only operation. The EICAR action generates the canonical 68-byte pattern, submits it through the official SDK, and passes only on an explicit malicious verdict. See the [official EICAR test-file specification](https://www.eicar.org/download-anti-malware-testfile/).
+
+Both actions show a redacted SDK invocation summary (endpoint, TLS, file content/size/SHA-256 and options) and the real parsed scanner response or error. This is not a raw HTTP/gRPC wire capture. Keys are redacted from request summaries, result fields and errors. The HTTP administration session is separate from scanner API-key authentication: scanner rejection appears in the diagnostic response without signing the administrator out. Local configurations without a key test connectivity, not key authentication.
+
+The request has a 45-second timeout including waiting for a scan slot. Generated files are private temporary files, removed after testing, and never queued or routed into Azure Blob destinations. Diagnostics audit their outcome without persisting response payloads or keys. Unit tests use fixtures; a live check runs only when an authenticated administrator clicks an action.
+
+## Azure connection diagnostics
+
+The mount dialog can **List containers** using the current account and credentials before a container name is known. Returned names are selectable, with continuation support. **Test container** sends a read-only Blob listing request for the selected container/prefix. These tests work with unsaved form data and do not persist credentials or create files. A container name is the segment immediately after `ACCOUNT.blob.core.windows.net/` in a blob URL; it is distinct from the storage account name.
+
+The console shows the actual SDK-generated Azure HTTP method, URL with SAS parameters removed, redacted authentication, response status, safe headers, and up to 256 KiB of the XML response body. Azure errors retain their code and request ID for troubleshooting, while stored keys, SAS signatures and Authorization signatures are redacted. Destination write access is only verified during real file routing. Account-wide container discovery requires account-level list permission; a container-scoped SAS can fail discovery but still pass a container test when its name is entered manually.
