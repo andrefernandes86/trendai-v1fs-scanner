@@ -22,6 +22,12 @@ func jobQuery(r *http.Request, maximum int) (string, []any, int, int) {
 		limit = maximum
 	}
 	parts := []string{}
+	if q.Get("visibility") == "visible" {
+		parts = append(parts, "NOT EXISTS(SELECT 1 FROM hidden_jobs h WHERE h.job_id=j.id)")
+	}
+	if q.Get("visibility") == "hidden" {
+		parts = append(parts, "EXISTS(SELECT 1 FROM hidden_jobs h WHERE h.job_id=j.id)")
+	}
 	args := []any{}
 	for name, column := range map[string]string{"state": "j.state", "verdict": "j.verdict", "profile": "j.profile_id"} {
 		if v := q.Get(name); v != "" {
@@ -80,7 +86,7 @@ func (a *App) retention(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	for _, table := range []string{"scan_details", "scan_results", "stage_attempts", "move_records", "source_claims"} {
+	for _, table := range []string{"job_timings", "hidden_jobs", "scan_summaries", "scan_details", "scan_results", "stage_attempts", "move_records", "source_claims"} {
 		if _, e = tx.Exec("DELETE FROM "+table+" WHERE job_id IN (SELECT id FROM jobs WHERE "+filter+")", cutoff); e != nil {
 			problem(w, 500, "Retention failed.")
 			return
@@ -117,4 +123,32 @@ func (a *App) jobHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, 200, map[string]any{"items": items, "total": total, "offset": offset, "limit": limit})
+}
+
+// Visibility is presentation only: accounting, alerts, exports and retries remain intact.
+func (a *App) jobVisibility(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Hidden bool `json:"hidden"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	id := r.PathValue("id")
+	var exists int
+	if a.DB.QueryRow("SELECT count(*) FROM jobs WHERE id=?", id).Scan(&exists) != nil || exists == 0 {
+		problem(w, 404, "Job not found.")
+		return
+	}
+	var err error
+	if input.Hidden {
+		_, err = a.DB.Exec("INSERT OR IGNORE INTO hidden_jobs(job_id) VALUES(?)", id)
+	} else {
+		_, err = a.DB.Exec("DELETE FROM hidden_jobs WHERE job_id=?", id)
+	}
+	if err != nil {
+		problem(w, 500, "Could not update visibility.")
+		return
+	}
+	a.Audit("job.visibility", id, "Hidden from default activity views: "+strconv.FormatBool(input.Hidden))
+	respond(w, 200, map[string]bool{"hidden": input.Hidden})
 }

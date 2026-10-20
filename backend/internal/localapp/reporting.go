@@ -12,6 +12,11 @@ func (a *App) statistics(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	counts := map[string]int{}
 	var scanningNow, pendingScans int
+	var transferring, pendingTransfers int
+	if e := a.DB.QueryRow("SELECT coalesce(sum(active=1),0),coalesce(sum(active=0),0) FROM transfer_queue").Scan(&transferring, &pendingTransfers); e != nil {
+		problem(w, 500, "Could not read transfer queue.")
+		return
+	}
 	if err := a.DB.QueryRow("SELECT coalesce(sum(CASE WHEN state='SCANNING' THEN 1 ELSE 0 END),0),coalesce(sum(CASE WHEN state IN ('QUEUED','RETRY_PENDING') AND verdict='UNKNOWN' THEN 1 ELSE 0 END),0) FROM jobs").Scan(&scanningNow, &pendingScans); err != nil {
 		problem(w, 500, "Scan statistics unavailable.")
 		return
@@ -26,7 +31,7 @@ func (a *App) statistics(w http.ResponseWriter, r *http.Request) {
 		}
 		counts[label] = countsTemp
 	}
-	respond(w, 200, map[string]any{"counts": counts, "scanningNow": scanningNow, "pendingScans": pendingScans, "observedAt": now.Format(time.RFC3339Nano), "note": "Pending scans counts queued or retry-waiting jobs awaiting scanning, excluding held files and transfers with a known verdict. Scanning now counts jobs in the scanning stage, including source download and waiting for the scanner. Queued jobs and destination transfers are excluded. Historical totals count distinct file-version jobs with a scanner response once. Rolling windows; month = 30 days. Older records use their last update time when no scan timestamp was recorded."})
+	respond(w, 200, map[string]any{"counts": counts, "transferring": transferring, "pendingTransfers": pendingTransfers, "transferWorkerLimit": TransferWorkerLimit(), "scanningNow": scanningNow, "pendingScans": pendingScans, "observedAt": now.Format(time.RFC3339Nano), "note": "Pending scans counts queued or retry-waiting jobs awaiting scanning, excluding held files and transfers with a known verdict. Scanning now counts jobs in the scanning stage, including source download and waiting for the scanner. Queued jobs and destination transfers are excluded. Historical totals count distinct file-version jobs with a scanner response once. Rolling windows; month = 30 days. Older records use their last update time when no scan timestamp was recorded."})
 }
 
 // Prevent spreadsheet programs from interpreting user-controlled fields as formulas.
@@ -38,7 +43,7 @@ func csvText(value string) string {
 	return value
 }
 func (a *App) exportJobsCSV(w http.ResponseWriter, r *http.Request) {
-	rows, err := a.DB.QueryContext(r.Context(), `SELECT j.id,j.key,j.profile_id,j.profile_name,j.source_id,j.etag,j.version,j.size,j.state,j.verdict,j.digest,j.destination,j.error,j.attempts,j.created_at,j.updated_at,COALESCE(s.scanned_at,''),COALESCE(s.verdict,''),COALESCE(d.payload,X''),COALESCE(m.payload,X'') FROM jobs j LEFT JOIN scan_results s ON s.job_id=j.id LEFT JOIN scan_details d ON d.job_id=j.id LEFT JOIN move_records m ON m.job_id=j.id ORDER BY j.created_at DESC,j.id`)
+	rows, err := a.DB.QueryContext(r.Context(), `SELECT j.id,j.key,j.profile_id,j.profile_name,j.source_id,j.etag,j.version,j.size,j.state,j.verdict,j.digest,j.destination,j.error,j.attempts,j.created_at,j.updated_at,COALESCE(s.scanned_at,''),COALESCE(s.verdict,''),COALESCE(d.payload,X''),COALESCE(m.payload,X''),COALESCE((SELECT json_group_object(stage,seconds) FROM job_timings WHERE job_id=j.id),'{}'),EXISTS(SELECT 1 FROM hidden_jobs WHERE job_id=j.id) FROM jobs j LEFT JOIN scan_results s ON s.job_id=j.id LEFT JOIN scan_details d ON d.job_id=j.id LEFT JOIN move_records m ON m.job_id=j.id ORDER BY j.created_at DESC,j.id`)
 	if err != nil {
 		problem(w, 500, "Could not export file records.")
 		return
@@ -48,14 +53,15 @@ func (a *App) exportJobsCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="v1fs-all-files.csv"`)
 	w.Header().Set("Cache-Control", "no-store")
 	writer := csv.NewWriter(w)
-	if err = writer.Write([]string{"job_id", "file", "profile_id", "profile_name", "source_connection_id", "source_etag", "source_version", "size_bytes", "state", "verdict", "malicious", "hash_collected", "hash_algorithm", "sha256", "destination", "error", "attempts", "created_at_utc", "updated_at_utc", "scanned_at_utc", "scanner_verdict", "malware_names", "detection_engines", "scan_response_recorded", "crc32c", "move_phase", "matched_rule"}); err != nil {
+	if err = writer.Write([]string{"job_id", "file", "profile_id", "profile_name", "source_connection_id", "source_etag", "source_version", "size_bytes", "state", "verdict", "malicious", "hash_collected", "hash_algorithm", "sha256", "destination", "error", "attempts", "created_at_utc", "updated_at_utc", "scanned_at_utc", "scanner_verdict", "malware_names", "detection_engines", "scan_response_recorded", "crc32c", "move_phase", "matched_rule", "timings_seconds_json", "hidden_from_activity"}); err != nil {
 		return
 	}
 	for rows.Next() {
 		var j Job
-		var scannedAt, scanVerdict string
+		var scannedAt, scanVerdict, timingJSON string
+		var hidden bool
 		var payload, moveBytes []byte
-		if err = rows.Scan(&j.ID, &j.Key, &j.ProfileID, &j.ProfileName, &j.SourceID, &j.ETag, &j.Version, &j.Size, &j.State, &j.Verdict, &j.Digest, &j.Destination, &j.Error, &j.Attempts, &j.CreatedAt, &j.UpdatedAt, &scannedAt, &scanVerdict, &payload, &moveBytes); err != nil {
+		if err = rows.Scan(&j.ID, &j.Key, &j.ProfileID, &j.ProfileName, &j.SourceID, &j.ETag, &j.Version, &j.Size, &j.State, &j.Verdict, &j.Digest, &j.Destination, &j.Error, &j.Attempts, &j.CreatedAt, &j.UpdatedAt, &scannedAt, &scanVerdict, &payload, &moveBytes, &timingJSON, &hidden); err != nil {
 			return
 		}
 		malicious := "unknown"
@@ -85,7 +91,7 @@ func (a *App) exportJobsCSV(w http.ResponseWriter, r *http.Request) {
 		if len(moveBytes) > 0 {
 			_ = a.Unseal(moveBytes, &move)
 		}
-		row := []string{j.ID, j.Key, j.ProfileID, j.ProfileName, j.SourceID, j.ETag, j.Version, strconv.FormatInt(j.Size, 10), j.State, j.Verdict, malicious, strconv.FormatBool(j.Digest != ""), algorithm, j.Digest, j.Destination, j.Error, strconv.Itoa(j.Attempts), j.CreatedAt, j.UpdatedAt, scannedAt, scanVerdict, strings.Join(names, "; "), strings.Join(engines, "; "), strconv.FormatBool(recorded), move.CRC32C, move.Phase, move.Rule}
+		row := []string{j.ID, j.Key, j.ProfileID, j.ProfileName, j.SourceID, j.ETag, j.Version, strconv.FormatInt(j.Size, 10), j.State, j.Verdict, malicious, strconv.FormatBool(j.Digest != ""), algorithm, j.Digest, j.Destination, j.Error, strconv.Itoa(j.Attempts), j.CreatedAt, j.UpdatedAt, scannedAt, scanVerdict, strings.Join(names, "; "), strings.Join(engines, "; "), strconv.FormatBool(recorded), move.CRC32C, move.Phase, move.Rule, timingJSON, strconv.FormatBool(hidden)}
 		for i := range row {
 			row[i] = csvText(row[i])
 		}

@@ -142,7 +142,7 @@ func (a *App) insertJob(s Snapshot) (string, error) {
 }
 func (a *App) Jobs() ([]Job, error) { return a.jobsPage("", nil, 500, 0) }
 func (a *App) jobsPage(where string, args []any, limit, offset int) ([]Job, error) {
-	query := "SELECT j.id,j.key,j.profile_id,j.profile_name,j.source_id,j.etag,j.version,j.size,j.state,j.verdict,j.digest,j.destination,j.error,j.attempts,j.created_at,j.updated_at,COALESCE(d.payload,X''),COALESCE(m.payload,X''),COALESCE(c.payload,X''),COALESCE((SELECT json_group_object(stage,attempts) FROM stage_attempts WHERE job_id=j.id),'{}'),COALESCE((SELECT n.id FROM jobs n WHERE n.source_id=j.source_id AND n.key=j.key AND n.profile_id=j.profile_id AND n.created_at>j.created_at AND n.state IN ('COMPLETED','QUARANTINED') ORDER BY n.created_at DESC LIMIT 1),'') FROM jobs j LEFT JOIN scan_details d ON d.job_id=j.id LEFT JOIN move_records m ON m.job_id=j.id LEFT JOIN source_claims c ON c.job_id=j.id" + where + " ORDER BY j.created_at DESC,j.id DESC LIMIT ? OFFSET ?"
+	query := "SELECT COALESCE((SELECT json_group_object(stage,seconds) FROM job_timings WHERE job_id=j.id),'{}'),EXISTS(SELECT 1 FROM hidden_jobs h WHERE h.job_id=j.id),j.id,j.key,j.profile_id,j.profile_name,j.source_id,j.etag,j.version,j.size,j.state,j.verdict,j.digest,j.destination,j.error,j.attempts,j.created_at,j.updated_at,COALESCE(ds.payload,d.payload,X''),COALESCE(m.payload,X''),COALESCE(c.payload,X''),COALESCE((SELECT json_group_object(stage,attempts) FROM stage_attempts WHERE job_id=j.id),'{}'),COALESCE((SELECT n.id FROM jobs n WHERE n.source_id=j.source_id AND n.key=j.key AND n.profile_id=j.profile_id AND n.created_at>j.created_at AND n.state IN ('COMPLETED','QUARANTINED') ORDER BY n.created_at DESC LIMIT 1),'') FROM jobs j LEFT JOIN scan_details d ON d.job_id=j.id LEFT JOIN scan_summaries ds ON ds.job_id=j.id LEFT JOIN move_records m ON m.job_id=j.id LEFT JOIN source_claims c ON c.job_id=j.id" + where + " ORDER BY j.created_at DESC,j.id DESC LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)
 	rows, e := a.DB.Query(query, args...)
 	if e != nil {
@@ -153,8 +153,8 @@ func (a *App) jobsPage(where string, args []any, limit, offset int) ([]Job, erro
 	for rows.Next() {
 		var j Job
 		var details, moveBytes, claimBytes []byte
-		var stages string
-		if e = rows.Scan(&j.ID, &j.Key, &j.ProfileID, &j.ProfileName, &j.SourceID, &j.ETag, &j.Version, &j.Size, &j.State, &j.Verdict, &j.Digest, &j.Destination, &j.Error, &j.Attempts, &j.CreatedAt, &j.UpdatedAt, &details, &moveBytes, &claimBytes, &stages, &j.NewerCompletedJobID); e != nil {
+		var stages, timings string
+		if e = rows.Scan(&timings, &j.Hidden, &j.ID, &j.Key, &j.ProfileID, &j.ProfileName, &j.SourceID, &j.ETag, &j.Version, &j.Size, &j.State, &j.Verdict, &j.Digest, &j.Destination, &j.Error, &j.Attempts, &j.CreatedAt, &j.UpdatedAt, &details, &moveBytes, &claimBytes, &stages, &j.NewerCompletedJobID); e != nil {
 			return nil, e
 		}
 		if len(claimBytes) > 0 {
@@ -170,11 +170,13 @@ func (a *App) jobsPage(where string, args []any, limit, offset int) ([]Job, erro
 			}
 		}
 		_ = json.Unmarshal([]byte(stages), &j.StageAttempts)
+		_ = json.Unmarshal([]byte(timings), &j.Timings)
 		j.Detections = []Detection{}
 		if len(details) > 0 {
 			var d ScanDetails
 			if a.Unseal(details, &d) == nil {
 				j.Detections = d.Detections
+				j.ArchiveInspection = d.ArchiveInspection
 				j.ScanResponseRecorded = true
 			}
 		}
@@ -197,6 +199,15 @@ func (a *App) transition(id, state, verdict, digest, destination, message string
 	return tx.Commit()
 }
 func (a *App) claim() (string, Snapshot, int, error) {
+	var pending int
+	if a.transferEnabled {
+		if err := a.DB.QueryRow("SELECT count(*) FROM transfer_queue").Scan(&pending); err != nil {
+			return "", Snapshot{}, 0, err
+		}
+		if pending >= WorkerLimit()*2 {
+			return "", Snapshot{}, 0, errors.New("transfer backpressure")
+		}
+	}
 	var s Snapshot
 	profiles, err := a.List("profiles")
 	if err != nil {
@@ -227,7 +238,7 @@ func (a *App) claim() (string, Snapshot, int, error) {
 	var id string
 	var b []byte
 	var attempts int
-	e = tx.QueryRow("SELECT j.id,j.snapshot,j.attempts FROM jobs j WHERE j.state IN ('QUEUED','RETRY_PENDING') AND j.available_at<=? AND (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.state IN ('SCANNING','ROUTING')) < "+limits+" AND (j.size < 1000000000 OR (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.size>=1000000000 AND active.state IN ('SCANNING','ROUTING')) < "+largeLimits+") ORDER BY j.created_at,j.id LIMIT 1", parameters...).Scan(&id, &b, &attempts)
+	e = tx.QueryRow("SELECT j.id,j.snapshot,j.attempts FROM jobs j WHERE j.state IN ('QUEUED','RETRY_PENDING') AND j.available_at<=? AND NOT EXISTS(SELECT 1 FROM transfer_queue tq WHERE tq.job_id=j.id) AND (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.state='SCANNING') < "+limits+" AND (j.size < 1000000000 OR (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.size>=1000000000 AND active.state='SCANNING') < "+largeLimits+") ORDER BY j.created_at,j.id LIMIT 1", parameters...).Scan(&id, &b, &attempts)
 	if e != nil {
 		return "", s, 0, e
 	}
@@ -244,6 +255,14 @@ func (a *App) claim() (string, Snapshot, int, error) {
 	}
 	if _, e = tx.Exec("INSERT INTO audit(at,action,object_id,detail) VALUES(?,?,?,?)", stamp(), "job.scanning", id, ""); e != nil {
 		return "", s, 0, e
+	}
+	if attempts == 0 {
+		var created string
+		if tx.QueryRow("SELECT created_at FROM jobs WHERE id=?", id).Scan(&created) == nil {
+			if at, err := time.Parse(time.RFC3339Nano, created); err == nil {
+				_, _ = tx.Exec("INSERT OR IGNORE INTO job_timings(job_id,stage,seconds) VALUES(?,'queue_wait',?)", id, time.Since(at).Seconds())
+			}
+		}
 	}
 	if e = tx.Commit(); e != nil {
 		return "", s, 0, e
@@ -305,7 +324,11 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 			_ = a.transition(id, move.FinalState, move.Verdict, move.Digest, move.Destination, move.Reason, 0)
 			return
 		}
-		a.finalizeMove(ctx, id, s, move)
+		if a.transferEnabled {
+			a.routeCaptured(ctx, id, s, "", move.Digest, move.Verdict, move.Rule, move.Reason)
+		} else {
+			a.finalizeMove(ctx, id, s, move)
+		}
 		return
 	}
 	verdict, verifiedDigest := "UNKNOWN", ""
@@ -323,12 +346,21 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		return
 	}
 	defer releaseSpace()
-	local, digest, e := Download(ctx, s, captureDir)
+	downloadStart := time.Now()
+	local, digest, captureCRC, e := DownloadChecksums(ctx, s, captureDir)
+	a.recordTiming(id, "download", downloadStart)
 	if e != nil {
 		a.retryStage(id, "download", s.Profile, verdict, verifiedDigest, "", "Source download failed, identity changed or source is unavailable.")
 		return
 	}
-	defer os.Remove(local)
+	s.CaptureSHA, s.CaptureCRC = digest, captureCRC
+	defer func() {
+		var queued int
+		_ = a.DB.QueryRow("SELECT count(*) FROM transfer_queue WHERE job_id=?", id).Scan(&queued)
+		if queued == 0 {
+			os.Remove(local)
+		}
+	}()
 	if verifiedDigest != "" && verifiedDigest != digest {
 		_ = a.transition(id, "HELD", "UNKNOWN", digest, "", "Source differs from previously captured bytes.", 0)
 		return
@@ -363,7 +395,13 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", "Scan attempts exhausted; isolated for review.")
 		return
 	}
-	raw, scanErr := a.Scan(ctx, local, s.Scanner, s.Profile)
+	scanStart := time.Now()
+	raw, scanErr := a.scanWithArchives(ctx, local, s.Key, s.Scanner, s.Profile, digest)
+	a.recordTiming(id, "scan", scanStart)
+	if errors.Is(scanErr, errArchiveCapacity) {
+		_ = a.transition(id, "RETRY_PENDING", "UNKNOWN", digest, "", scanErr.Error(), time.Minute)
+		return
+	}
 	if scanErr != nil {
 		if used+1 >= defaultInt(s.Profile.ScanAttempts, 5) {
 			_, _ = a.stageAttempt(id, "scan")
@@ -378,13 +416,24 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		return
 	}
 	verdict = core.Normalize(raw)
-	_, e = a.DB.Exec("INSERT INTO scan_results(job_id,scanned_at,verdict) VALUES(?,?,?) ON CONFLICT(job_id) DO UPDATE SET verdict=excluded.verdict", id, stamp(), verdict)
+	var origin struct {
+		ScanType     string `json:"scanType"`
+		ScannerCalls int    `json:"scannerCalls"`
+	}
+	_ = json.Unmarshal(raw, &origin)
+	if origin.ScanType != "archive-inspection" || origin.ScannerCalls > 0 {
+		_, e = a.DB.Exec("INSERT INTO scan_results(job_id,scanned_at,verdict) VALUES(?,?,?) ON CONFLICT(job_id) DO UPDATE SET verdict=excluded.verdict", id, stamp(), verdict)
+	}
 	if e != nil {
 		return
 	}
 	if verdict == "UNKNOWN" {
 		if scanException(raw) == "permanent" {
-			a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", "Permanent scanner exception; inspect scanner response.")
+			reason := "Permanent scanner exception; inspect scanner response."
+			if origin.ScanType == "archive-inspection" {
+				reason = "Archive inspection blocked or incomplete; inspect archive evidence."
+			}
+			a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", reason)
 			return
 		}
 		if used+1 >= defaultInt(s.Profile.ScanAttempts, 5) {

@@ -209,6 +209,32 @@ Open **Scan profiles → Edit profile → Large files & size policy**. Keep the 
 
 Above the threshold choose **Hold at source**, **Move to scan failed**, or **Move to clean — NOT SCANNED**. Both move options apply scanned=false, verdict=not_scanned and reason=oversized; neither generates a clean verdict. Use the scan-failed destination/prefix for an oversized review folder. Test actions with a small threshold on a dedicated profile. Moved files still require verified destination bytes before source removal.
 
-An SDK verdict does not prove every byte/member was inspected. Scanner inspection/extraction limits remain applicable; no application extraction stage exists. See [customer PoC diagrams and limits](poc-architecture.md).
+An SDK verdict does not prove every byte/member was inspected. Scanner inspection/extraction limits remain applicable; optional application extraction is available per profile. See [customer PoC diagrams and limits](poc-architecture.md).
 
 ![Configure large-file policies in the profile editor](images/profile-large-files.png)
+
+## Inspect compressed files
+
+In **Scan profiles → Edit profile → Compressed-file inspection**, enable extraction and member scans, then set a nesting limit from **1 to 20 layers**, file count, total/member expanded sizes, expansion ratio, extraction time and concurrency. Defaults are off / 5 layers / 1,000 entries / 10 GB total / 2 GB per member / 100× / 300 seconds / one inspection. Unsupported, encrypted, corrupt or over-budget archives never qualify as clean. The original and every extracted member must scan successfully before clean routing. [Step-by-step behavior, protections and testing](archive-inspection.md).
+
+## Choose light or dark mode
+
+Use **Dark mode / Light mode** in the upper-right header. On a narrow screen the button shows a moon or sun icon. The same toggle is on the sign-in page. Your choice is saved in this browser and survives page changes, sign-out and reload. The first visit follows the operating system's appearance preference.
+
+![Dark overview](images/overview-dark.png)
+
+## Simplified sizing
+
+Open **Sizing calculator** after Audit log. Enter files per day, processing hours, average size and largest expected file. Read the CPU, RAM, SSD and concurrency recommendation. Leave **Advanced settings** closed unless you have measured processing times or need to change burst/storage assumptions. **Capacity breakdown** and vendor benchmark details are expandable. These are planning estimates; validate against your storage and scanner.
+
+## Hide a history record without deleting it
+
+In **File activity**, use the crossed-eye **Hide record** button beside a file. Select **Records → Hidden records** or **All records** to find it again; click **Restore record** to restore it. Hidden records remain in CSV exports, audit history, statistics, source accounting and held-file alerts. Hiding never cancels a job or changes its verdict.
+
+## Subfolders and validation files
+
+Source discovery is recursive by default. Azure Blob lists every blob under the configured source prefix. Azure Files, SMB and NFS traverse subfolders under that prefix, with a 64-level limit and no symlink traversal. Only the profile source is monitored; destinations are not scanned by that profile. A prefix narrows discovery and is case sensitive.
+
+A `runtimecheck/` destination folder can remain from the optional runtime validation utility. It holds earlier test results, is not a scanner component, and is not needed for normal operation. The utility runs only when explicitly invoked. Hide its historical records if desired; remove stored test files only after confirming they are no longer needed. The application's Hide record action does not delete storage objects.
+
+See [transfer tuning](performance-tuning.md) for queue controls and file timing details.

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 )
 
 type MoveRecord struct {
@@ -148,9 +150,27 @@ func (a *App) finalizeMove(ctx context.Context, id string, s Snapshot, m MoveRec
 	}
 	defer release()
 	ctx = locked
-	if e := a.verifyDestination(ctx, &m); e != nil {
+	verifyStart := time.Now()
+	verifyErr := a.verifyDestination(ctx, &m)
+	a.recordTiming(id, "verify", verifyStart)
+	if verifyErr != nil {
 		a.retryStage(id, "transfer", s.Profile, m.Verdict, m.Digest, m.Destination, "Destination changed or could not be verified. Source preserved.")
 		return
+	}
+
+	if m.Target.Type() == "blob" {
+		tags, err := routingTags(s.Profile, m.Verdict)
+		if err == nil {
+			b, e := m.Target.BlobClient(m.Key, "")
+			err = e
+			if err == nil {
+				_, err = b.SetTags(ctx, tags, &blob.SetTagsOptions{AccessConditions: &blob.AccessConditions{LeaseAccessConditions: &blob.LeaseAccessConditions{LeaseID: to.Ptr(destinationLeaseID(id))}}})
+			}
+		}
+		if err != nil {
+			a.retryStage(id, "transfer", s.Profile, m.Verdict, m.Digest, m.Destination, "Destination tags unavailable; source preserved.")
+			return
+		}
 	}
 	m.Phase = "SOURCE_DELETE_PENDING"
 	if e := a.saveMove(id, m); e != nil {
@@ -187,6 +207,9 @@ func scanException(raw []byte) string {
 	if json.Unmarshal(raw, &v) != nil {
 		return "transient"
 	}
+	if blocked, _ := v["archivePolicyBlocked"].(bool); blocked {
+		return "permanent"
+	}
 	text := strings.ToLower(string(raw))
 	for _, s := range []string{"password protected", "password-protected", "encrypted archive", "unsupported file", "unsupported format", "file too large", "maximum file size", "scan limit exceeded", "decompression limit"} {
 		if strings.Contains(text, s) {
@@ -196,17 +219,37 @@ func scanException(raw []byte) string {
 	return "transient"
 }
 func (a *App) routeCaptured(ctx context.Context, id string, s Snapshot, local, digest, verdict, rule, reason string) {
+	if a.transferEnabled {
+		if err := a.enqueueTransfer(id, s, local, digest, verdict, rule, reason); err != nil {
+			a.retryStage(id, "transfer", s.Profile, verdict, digest, "", "Could not persist transfer handoff; source preserved.")
+		}
+		return
+	}
+	a.routeCapturedNow(ctx, id, s, local, digest, verdict, rule, reason)
+}
+func (a *App) routeCapturedNow(ctx context.Context, id string, s Snapshot, local, digest, verdict, rule, reason string) {
 	if verdict == "UNKNOWN" && sameStorageRoot(s.Source, s.Failed) {
 		_ = a.transition(id, "HELD", "UNKNOWN", digest, s.Source.BaseURL()+"/"+s.Key, reason+" Recovery result still unknown; isolated source retained.", 0)
 		return
 	}
-	sha, crc, n, e := checksums(local)
+	sha, crc, n, e := s.CaptureSHA, s.CaptureCRC, s.Size, error(nil)
+	if sha == "" || crc == "" {
+		sha, crc, n, e = checksums(local)
+	} else {
+		var info os.FileInfo
+		info, e = os.Stat(local)
+		if e == nil {
+			n = info.Size()
+		}
+	}
 	if e != nil || sha != digest || n != s.Size {
 		_ = a.transition(id, "HELD", "UNKNOWN", digest, "", "Captured source integrity failed.", 0)
 		return
 	}
 	_ = a.transition(id, "ROUTING", verdict, digest, "", reason, 0)
+	uploadStart := time.Now()
 	destination, state, e := routeResult(ctx, id, s, local, digest, verdict)
+	a.recordTiming(id, "upload", uploadStart)
 	if e != nil {
 		a.retryStage(id, "transfer", s.Profile, verdict, digest, "", "Destination transfer or verification failed; source preserved.")
 		return
@@ -220,7 +263,9 @@ func (a *App) routeCaptured(ctx context.Context, id string, s Snapshot, local, d
 	}
 	key := strings.TrimPrefix(destination, target.BaseURL()+"/")
 	m := MoveRecord{Phase: "DESTINATION_VERIFIED", Destination: destination, Target: target, Key: key, FinalState: state, Verdict: verdict, Digest: digest, CRC32C: crc, Size: n, SourceETag: s.sourceETag(), Rule: rule, Reason: reason}
-	if e = a.verifyDestination(ctx, &m); e != nil {
+	if target.Type() == "blob" {
+		m.Phase = "DESTINATION_UPLOADED"
+	} else if e = a.verifyDestination(ctx, &m); e != nil {
 		a.retryStage(id, "transfer", s.Profile, verdict, digest, destination, "Destination CRC32C verification failed; source preserved.")
 		return
 	}
@@ -228,7 +273,7 @@ func (a *App) routeCaptured(ctx context.Context, id string, s Snapshot, local, d
 		_ = a.transition(id, "HELD", verdict, digest, destination, "Could not persist verified move. Source preserved.", 0)
 		return
 	}
-	_ = a.transition(id, "ROUTING", verdict, digest, destination, "Destination verified; source deletion pending.", 0)
+	_ = a.transition(id, "ROUTING", verdict, digest, destination, "Destination uploaded; leased verification and source deletion pending.", 0)
 	a.finalizeMove(ctx, id, s, m)
 }
 

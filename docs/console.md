@@ -57,6 +57,6 @@ Assurance separates overdue active work from held review. Historical source-read
 
 The profile editor includes **Large files & size policy**: maximum submitted size (up to 100 GB decimal), action above the threshold, concurrency for files at least 1 GB and per-attempt job timeout. Defaults are 100 GB, hold, one large file and six hours. Hold leaves the file at source with an inventory policy reason. Both oversized move actions mark NOT SCANNED and apply scanned=false/verdict=not_scanned/reason=oversized. A clean destination is an explicit bypass choice, never a clean scan verdict.
 
-Files are submitted unchanged through the SDK; the app does not truncate or split at 2 GiB. Engine inspection limits still apply. The app has not implemented archive extraction. See the [PoC architecture](poc-architecture.md) for controls, diagrams and validation boundaries.
+Files are submitted unchanged through the SDK; the app does not truncate or split at 2 GiB. Engine inspection limits still apply. Optional profile-controlled archive inspection is now available; see [its limits and behavior](archive-inspection.md). See the [PoC architecture](poc-architecture.md) for controls, diagrams and validation boundaries.
 
 ![Large-file profile controls](images/profile-large-files.png)

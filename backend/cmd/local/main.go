@@ -22,6 +22,9 @@ func main() {
 		case "-supervise":
 			supervise()
 			return
+		case "-extract":
+			localapp.RunArchiveChild()
+			return
 		case "-scan":
 			runIsolatedScan()
 			return

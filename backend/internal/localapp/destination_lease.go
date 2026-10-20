@@ -22,7 +22,7 @@ func leaseDestination(ctx context.Context, id string, m MoveRecord) (context.Con
 	if len(id) < 32 {
 		return ctx, nil, fmt.Errorf("invalid lease identity")
 	}
-	token := id[:8] + "-" + id[8:12] + "-" + id[12:16] + "-" + id[16:20] + "-" + id[20:32]
+	token := destinationLeaseID(id)
 	l, e := lease.NewBlobClient(b, &lease.BlobClientOptions{LeaseID: to.Ptr(token)})
 	if e != nil {
 		return ctx, nil, e
@@ -59,4 +59,8 @@ func leaseDestination(ctx context.Context, id string, m MoveRecord) (context.Con
 		_, _ = l.ReleaseLease(c, nil)
 	}
 	return locked, release, nil
+}
+
+func destinationLeaseID(id string) string {
+	return id[:8] + "-" + id[8:12] + "-" + id[12:16] + "-" + id[16:20] + "-" + id[20:32]
 }

@@ -54,3 +54,27 @@ CSV covers full history; the UI provides filtered pagination. Detection details 
 ## Large-file execution
 
 See [large-file controls](poc-architecture.md#large-files-and-policy). Worker heartbeats continue during long attempts, bounded by the job deadline; a worker stuck after its deadline eventually loses its heartbeat and triggers recovery. Child/SDK timeouts follow profile duration. Exact source-version inventory rows link to existing durable jobs to reconcile historical admission errors without changing scan results.
+
+## Optional archive inspection
+
+[Archive inspection](archive-inspection.md) adds a credential-free, Landlock/seccomp-confined extraction subprocess before SDK scans. All layers share entry/byte/ratio/time budgets. Original and extracted members are scanned sequentially; a shared cap of two archive inspections and per-profile limits prevent fan-out. Full encrypted member evidence is retained separately from compact activity summaries. The original archive, never extracted members, follows the existing verified routing path.
+
+## Independent scan and transfer pools
+
+The engine persists encrypted transfer handoffs in `transfer_queue`; scan workers can admit the next source while transfer workers upload, lease, verify, tag and delete. Profile limits apply independently to scans, transfers and large transfers; global pools cap their combined use. SHA-256/CRC32C are calculated together during capture and together in one leased Blob readback. `job_timings` records stage durations. `hidden_jobs` changes activity presentation only and cannot suppress accounting or assurance alerts. See [performance tuning](performance-tuning.md) for restart and backpressure details.
+
+```mermaid
+flowchart LR
+  Source[Recursive source discovery] --> Jobs[(Durable jobs and inventory)]
+  Jobs --> Capture[Bounded capture and scan pool]
+  Capture --> Optional[Optional archive sandbox and member scans]
+  Optional --> SDK[Vision One cloud or local scanner]
+  Capture --> Transfers[(Encrypted bounded transfer queue)]
+  SDK --> Transfers
+  Transfers --> Pool[Separate transfer pool]
+  Pool --> Upload[Upload exact original bytes]
+  Upload --> Lease[Lease destination and verify SHA-256 plus CRC32C once]
+  Lease --> Tags[Apply result tags]
+  Tags --> Delete[Conditional source deletion]
+  Delete --> History[(History, timings and audit)]
+```

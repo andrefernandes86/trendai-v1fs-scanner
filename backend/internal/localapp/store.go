@@ -13,16 +13,18 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 )
 
 type App struct {
-	managementOnly bool
-	healthMu       sync.Mutex
-	heartbeats     map[string]time.Time
-	started        time.Time
+	managementOnly  bool
+	transferEnabled bool
+	healthMu        sync.Mutex
+	heartbeats      map[string]time.Time
+	started         time.Time
 
 	lockFile        *os.File
 	wg              sync.WaitGroup
@@ -63,10 +65,15 @@ type Scanner struct {
 	TLS      bool   `json:"tls"`
 }
 type Profile struct {
-	MaxScanBytes      int64  `json:"maxScanBytes"`
-	OversizeAction    string `json:"oversizeAction"`
-	LargeFileScans    int    `json:"largeFileScans"`
-	JobTimeoutSeconds int    `json:"jobTimeoutSeconds"`
+	UploadConcurrency     int            `json:"uploadConcurrency"`
+	UploadBlockMiB        int            `json:"uploadBlockMiB"`
+	SimultaneousTransfers int            `json:"simultaneousTransfers"`
+	LargeFileTransfers    int            `json:"largeFileTransfers"`
+	Archive               ArchiveOptions `json:"archive"`
+	MaxScanBytes          int64          `json:"maxScanBytes"`
+	OversizeAction        string         `json:"oversizeAction"`
+	LargeFileScans        int            `json:"largeFileScans"`
+	JobTimeoutSeconds     int            `json:"jobTimeoutSeconds"`
 
 	Rules                     []FileRule `json:"rules"`
 	IgnorePatterns            string     `json:"ignorePatterns"`
@@ -106,6 +113,8 @@ type Profile struct {
 	Revision            int64  `json:"revision"`
 }
 type Snapshot struct {
+	CaptureSHA         string  `json:"captureSHA,omitempty"`
+	CaptureCRC         string  `json:"captureCRC,omitempty"`
 	ClaimedKey         string  `json:"claimedKey,omitempty"`
 	ClaimedETag        string  `json:"claimedETag,omitempty"`
 	Source             Mount   `json:"source"`
@@ -118,28 +127,31 @@ type Snapshot struct {
 	Size               int64
 }
 type Job struct {
-	SourceClaim          map[string]any `json:"sourceClaim,omitempty"`
-	Integrity            map[string]any `json:"integrity,omitempty"`
-	StageAttempts        map[string]int `json:"stageAttempts,omitempty"`
-	NewerCompletedJobID  string         `json:"newerCompletedJobId,omitempty"`
-	Detections           []Detection    `json:"detections"`
-	ScanResponseRecorded bool           `json:"scanResponseRecorded"`
-	ID                   string         `json:"id"`
-	Key                  string         `json:"key"`
-	ProfileID            string         `json:"profileId"`
-	ProfileName          string         `json:"profileName"`
-	SourceID             string         `json:"sourceId"`
-	ETag                 string         `json:"etag"`
-	Version              string         `json:"version"`
-	Size                 int64          `json:"size"`
-	State                string         `json:"state"`
-	Verdict              string         `json:"verdict"`
-	Digest               string         `json:"digest"`
-	Destination          string         `json:"destination"`
-	Error                string         `json:"error"`
-	Attempts             int            `json:"attempts"`
-	CreatedAt            string         `json:"createdAt"`
-	UpdatedAt            string         `json:"updatedAt"`
+	Timings              map[string]float64 `json:"timingsSeconds,omitempty"`
+	Hidden               bool               `json:"hidden"`
+	ArchiveInspection    *ArchiveSummary    `json:"archiveInspection,omitempty"`
+	SourceClaim          map[string]any     `json:"sourceClaim,omitempty"`
+	Integrity            map[string]any     `json:"integrity,omitempty"`
+	StageAttempts        map[string]int     `json:"stageAttempts,omitempty"`
+	NewerCompletedJobID  string             `json:"newerCompletedJobId,omitempty"`
+	Detections           []Detection        `json:"detections"`
+	ScanResponseRecorded bool               `json:"scanResponseRecorded"`
+	ID                   string             `json:"id"`
+	Key                  string             `json:"key"`
+	ProfileID            string             `json:"profileId"`
+	ProfileName          string             `json:"profileName"`
+	SourceID             string             `json:"sourceId"`
+	ETag                 string             `json:"etag"`
+	Version              string             `json:"version"`
+	Size                 int64              `json:"size"`
+	State                string             `json:"state"`
+	Verdict              string             `json:"verdict"`
+	Digest               string             `json:"digest"`
+	Destination          string             `json:"destination"`
+	Error                string             `json:"error"`
+	Attempts             int                `json:"attempts"`
+	CreatedAt            string             `json:"createdAt"`
+	UpdatedAt            string             `json:"updatedAt"`
 }
 
 func Open(data, web string) (*App, error)       { return openRole(data, web, "combined") }
@@ -220,6 +232,10 @@ CREATE TABLE IF NOT EXISTS move_records(job_id TEXT PRIMARY KEY,payload BLOB NOT
 CREATE TABLE IF NOT EXISTS inventory(profile_id TEXT NOT NULL,key TEXT NOT NULL,etag TEXT NOT NULL,size INTEGER NOT NULL,last_seen TEXT NOT NULL,status TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',job_id TEXT NOT NULL DEFAULT '',PRIMARY KEY(profile_id,key,etag));
 CREATE INDEX IF NOT EXISTS inventory_seen ON inventory(last_seen,status);
 CREATE TABLE IF NOT EXISTS recovery_links(parent_id TEXT NOT NULL,child_id TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL,PRIMARY KEY(parent_id,child_id));
+CREATE TABLE IF NOT EXISTS transfer_queue(job_id TEXT PRIMARY KEY,profile_id TEXT NOT NULL,size INTEGER NOT NULL,active INTEGER NOT NULL,payload BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS job_timings(job_id TEXT NOT NULL,stage TEXT NOT NULL,seconds REAL NOT NULL,PRIMARY KEY(job_id,stage));
+CREATE TABLE IF NOT EXISTS hidden_jobs(job_id TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS scan_summaries(job_id TEXT PRIMARY KEY,payload BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS scan_details(job_id TEXT PRIMARY KEY,payload BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS scan_results(job_id TEXT PRIMARY KEY, scanned_at TEXT NOT NULL, verdict TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,key TEXT NOT NULL,profile_id TEXT NOT NULL,profile_name TEXT NOT NULL,source_id TEXT NOT NULL,etag TEXT NOT NULL,version TEXT NOT NULL,size INTEGER NOT NULL,state TEXT NOT NULL,verdict TEXT NOT NULL DEFAULT 'UNKNOWN',digest TEXT NOT NULL DEFAULT '',destination TEXT NOT NULL DEFAULT '',error TEXT NOT NULL DEFAULT '',attempts INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,available_at INTEGER NOT NULL,snapshot BLOB NOT NULL);
@@ -245,6 +261,12 @@ CREATE TABLE IF NOT EXISTS observations(profile_id TEXT NOT NULL,key TEXT NOT NU
 			return nil, e
 		}
 		for _, entry := range entries {
+			if entry.IsDir() && strings.HasPrefix(entry.Name(), "archive-") {
+				if e = os.RemoveAll(filepath.Join(captures, entry.Name())); e != nil {
+					return nil, e
+				}
+				continue
+			}
 			if entry.Type().IsRegular() {
 				if e = os.Remove(filepath.Join(captures, entry.Name())); e != nil {
 					return nil, e
@@ -254,7 +276,7 @@ CREATE TABLE IF NOT EXISTS observations(profile_id TEXT NOT NULL,key TEXT NOT NU
 	}
 	a := &App{managementOnly: role == "api", lockFile: lock, DB: db, aead: ae, DataDir: data, WebDir: web, wake: make(chan struct{}, 1)}
 	if role != "api" {
-		_, e = db.Exec("UPDATE jobs SET state='QUEUED' WHERE state IN ('SCANNING','ROUTING')")
+		_, e = db.Exec("DELETE FROM transfer_queue; UPDATE jobs SET state='QUEUED' WHERE state IN ('SCANNING','ROUTING')")
 	}
 	success = e == nil
 	return a, e
@@ -339,13 +361,21 @@ func (a *App) Close() error {
 	return e
 }
 func (a *App) Run(ctx context.Context) {
+	a.transferEnabled = true
 	a.healthMu.Lock()
 	a.started = time.Now()
 	a.heartbeats = map[string]time.Time{"monitor": time.Now()}
 	for i := 0; i < WorkerLimit(); i++ {
 		a.heartbeats[fmt.Sprintf("worker-%d", i)] = time.Now()
 	}
+	for i := 0; i < TransferWorkerLimit(); i++ {
+		a.heartbeats[fmt.Sprintf("transfer-%d", i)] = time.Now()
+	}
 	a.healthMu.Unlock()
+	for i := 0; i < TransferWorkerLimit(); i++ {
+		a.wg.Add(1)
+		go func(index int) { defer a.wg.Done(); a.transferWorker(ctx, index) }(i)
+	}
 	for i := 0; i < WorkerLimit(); i++ {
 		a.wg.Add(1)
 		go func(index int) { defer a.wg.Done(); a.workerNamed(ctx, fmt.Sprintf("worker-%d", index)) }(i)

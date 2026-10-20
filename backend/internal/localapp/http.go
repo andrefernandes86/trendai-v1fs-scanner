@@ -92,6 +92,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/jobs/export.csv", a.exportJobsCSV)
 	mux.HandleFunc("GET /api/statistics", a.statistics)
 	mux.HandleFunc("GET /api/jobs/page", a.jobHistory)
+	mux.HandleFunc("POST /api/jobs/{id}/visibility", a.jobVisibility)
 	mux.HandleFunc("GET /api/jobs/{id}", a.jobRecord)
 	mux.HandleFunc("GET /api/jobs", func(w http.ResponseWriter, r *http.Request) {
 		j, e := a.queryJobs(r)

@@ -16,6 +16,7 @@ Download the diagram as [SVG](images/solution-architecture.svg) or [PNG](images/
 | Discovery scheduler | Polls only profile source/prefix; records inventory and unchanged-file observations before admission. |
 | Durable queue and admission | SQLite jobs with immutable encrypted policy snapshots; global/profile worker limits and an independent profile cap for files at least 1 GB. |
 | Processing workers | Capture source bytes to disk using bounded buffers; execute size policy, retries, SDK invocation, routing and verified deletion. |
+| Optional archive extractor | Separate credential-free process; Landlock/seccomp, size/count/ratio/depth/time/process limits; fails closed. |
 | SDK child process | One isolated process per scan; keeps endpoint settings separate between concurrent requests. The SDK serves file ranges requested by the service; the app does not truncate to 2 GiB. |
 | File Security service | Cloud regional service or separately deployed local scanner. Inspection depth, format support, licensing and quotas belong to this service. |
 | Storage connectors | Azure Blob, Azure Files, SMB and NFSv3 TCP AUTH_SYS. Application connections, not privileged OS mounts. |
@@ -39,7 +40,9 @@ flowchart TB
         Engine <--> DB
         Engine --> Queue[Admission: global / profile / large-file limits]
         Queue --> Workers[Capture / scan / route / verify workers]
-        Workers --> SDK[Isolated official SDK child per scan]
+        Workers --> Extract[Optional isolated extractor: shared bomb limits, up to 20 layers]
+        Extract --> SDK[Isolated official SDK scans: original and members]
+        Workers --> SDK
         Workers <--> Disk[Persistent captures and disk reservations]
     end
     SDK --> Service[Vision One cloud region OR local scanner]
@@ -82,7 +85,7 @@ Exclusions and explicit oversized bypasses are **NOT SCANNED**. A clean destinat
 
 ## Large files and policy
 
-The app admits original files up to **100 GB decimal** by default, configurable downward. It does not split or truncate files before SDK submission. An SDK verdict does not prove that every byte/member of an arbitrarily large file was inspected: engine inspection, extraction and format limits apply. There is no application-side decompression stage.
+The app admits original files up to **100 GB decimal** by default, configurable downward. It does not split or truncate files before SDK submission. An SDK verdict does not prove that every byte/member of an arbitrarily large file was inspected: engine inspection, extraction and format limits apply. Optional profile-controlled ZIP/TAR/GZIP inspection supports up to 20 layers; see [archive inspection](archive-inspection.md).
 
 In **Scan profiles → Edit profile → Large files & size policy**, configure:
 
@@ -116,7 +119,15 @@ Provision disk for concurrent captures plus history, logs, backups and free spac
 - Full 100 GB end-to-end throughput and customer-scale soak validation need representative storage/network/scanner conditions. Sparse-file admission tests do not prove throughput.
 - The old app rejection and fixed ten-minute timeouts are removed; engine inspection limits remain applicable.
 - Unknown never defaults to clean. Explicit bypass stays distinguishable from a successful scan.
-- External notifications remain deferred. Archive extraction is a proposal only; implementation has not started.
+- External notifications remain deferred. Archive inspection is optional and defaults to off; configured limits and sandbox availability determine coverage.
 - Restrict quarantine/failed storage, preserve backups/key and avoid competing instances on the same source/data directory.
 
 See [user guide](user-guide.md), [operations](operations.md), [reliability](reliability.md) and [architecture detail](architecture.md).
+
+## Archive demonstration
+
+Enable the option on a dedicated profile and follow [archive acceptance checks](archive-inspection.md#suggested-poc-checks). An original SDK error still prevents a clean result; this is not an automatic override for unsupported archives.
+
+## Current processing and console controls
+
+See [transfer performance](performance-tuning.md) for the independent scan and transfer pools, shared/per-profile limits and one-pass leased Blob integrity check. The overview shows both queue depths; file records expose stage durations. See [user guide](user-guide.md) for light/dark appearance, reversible history hiding and simplified sizing. Hidden records never suppress held-file assurance alerts.

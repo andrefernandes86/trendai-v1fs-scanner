@@ -8,6 +8,7 @@ A host-based Azure Blob, Azure Files, SMB and NFSv3 scanner with a React managem
 
 - Current host: [open the console](http://192.168.1.52:8095).
 - Administrator: [deploy, back up and upgrade](docs/operations.md#container-first-host-deployment).
+- Compressed files: [enable archive inspection, nesting and bomb-protection limits](docs/archive-inspection.md).
 - Customer PoC: [solution diagrams, components, workflow and acceptance checklist](docs/poc-architecture.md).
 - Technical reference: [architecture](docs/architecture.md), [profile options](docs/console.md), [reliability](docs/reliability.md).
 
@@ -79,3 +80,14 @@ The image supervises the management API and processing engine independently. SDK
 ### Performance validation
 
 See [performance testing](docs/performance-testing.md) for the real-source 1,000-file burst, 100-files-per-second batches, supplementary genuine ZIP tests, and sanitized latency/verification reports. Renamed-extension load samples retain their original bytes; they are not format conversions.
+
+### Current console and processing controls
+
+- Light/dark appearance, saved per browser; compact routing and processing-health views.
+- Simplified four-input sizing, with optional advanced assumptions.
+- Recursive source scanning; reversible history hiding that preserves accounting and alerts.
+- Independent bounded scan/transfer pools, profile upload tuning, single-pass leased Blob verification, and per-stage timings.
+
+See [step-by-step user guide](docs/user-guide.md), [transfer performance controls](docs/performance-tuning.md) and [customer architecture and diagrams](docs/poc-architecture.md).
+
+Functional evidence: [archive validation](docs/validation/archive-inspection-20261020.md) and [transfer/console validation](docs/validation/transfer-console-20261020.md).

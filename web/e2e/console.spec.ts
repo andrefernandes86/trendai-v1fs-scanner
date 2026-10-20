@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 test('profile policy editor and responsive toolbar remain usable',async({page})=>{
- await page.goto('/');
+ await page.goto('/');await page.getByRole('heading',{name:/^(Set up your scanner|Welcome back)$/}).waitFor();
  const setup=page.getByRole('button',{name:'Create administrator & continue'});
  if(await setup.isVisible()){
   await page.getByLabel('Create administrator password').fill('test-only-password-2026');
@@ -25,7 +25,7 @@ test('profile policy editor and responsive toolbar remain usable',async({page})=
 
  await expect(page.getByLabel('Auto-refresh interval')).toHaveCount(0);
  const create=page.getByRole('button',{name:'Create scan profile',exact:true});if(await create.isVisible()){await create.click()}else{await page.getByRole('button',{name:'New profile',exact:true}).click()}
- await expect(page.getByLabel('Maximum scan file size (GB)',{exact:false})).toHaveValue('100');await expect(page.getByRole('heading',{name:'7. Exclusions & hold rules'})).toBeVisible();
+ await expect(page.getByLabel('Maximum archive layers',{exact:false})).toBeDisabled();await expect(page.getByLabel('Maximum scan file size (GB)',{exact:false})).toHaveValue('100');await expect(page.getByRole('heading',{name:'7. Exclusions & hold rules'})).toBeVisible();
  await page.getByRole('button',{name:'Add rule',exact:true}).click();
  await page.getByLabel('Rule name (unique)', {exact:true}).fill('skip-images');
  await page.getByLabel('Path/filename pattern').fill('*.png');
@@ -39,10 +39,10 @@ test('profile policy editor and responsive toolbar remain usable',async({page})=
  const overflowing=await page.locator('[role="dialog"]').evaluate(el=>el.scrollWidth>el.clientWidth+2);expect(overflowing).toBe(false);
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.locator('.source-card').filter({has:page.getByRole('heading',{name:'E2E policy',exact:true})}).getByRole('button',{name:'Edit profile',exact:true}).click();
- await page.getByRole('spinbutton',{name:/^Simultaneous scans/}).fill('4');await page.getByLabel('Maximum scan file size (GB)',{exact:false}).fill('0.001');await page.getByLabel('Files above scan-size limit',{exact:false}).selectOption('failed');await page.getByLabel('Simultaneous large files',{exact:false}).fill('2');await page.getByLabel('Maximum job duration (seconds)',{exact:false}).fill('7200');
+ await page.getByRole('spinbutton',{name:/^Simultaneous scans/}).fill('4');await page.getByLabel('Enable archive extraction and member scans',{exact:false}).check();await page.getByLabel('Maximum archive layers',{exact:false}).fill('20');await page.getByLabel('Maximum expansion ratio',{exact:false}).fill('50');await page.getByLabel('Maximum total expanded size (GB)',{exact:false}).fill('3');await page.getByLabel('Maximum extracted member size (GB)',{exact:false}).fill('1');await page.getByLabel('Maximum scan file size (GB)',{exact:false}).fill('0.001');await page.getByLabel('Files above scan-size limit',{exact:false}).selectOption('failed');await page.getByLabel('Simultaneous large files',{exact:false}).fill('2');await page.getByLabel('Maximum job duration (seconds)',{exact:false}).fill('7200');
  await page.getByRole('button',{name:'Save profile',exact:true}).click();
  await expect(page.locator('.source-card').filter({has:page.getByRole('heading',{name:'E2E policy',exact:true})})).toContainText('up to 4 simultaneous scans');
- const saved=await (await page.request.get('/api/profiles')).json();const policy=saved.find((p:any)=>p.id==='e2e-policy');expect(policy.maxScanBytes).toBe(1000000);expect(policy.oversizeAction).toBe('failed');expect(policy.largeFileScans).toBe(2);expect(policy.jobTimeoutSeconds).toBe(7200);await page.getByRole('button',{name:'File activity',exact:true}).click();
+ const saved=await (await page.request.get('/api/profiles')).json();const policy=saved.find((p:any)=>p.id==='e2e-policy');expect(policy.archive.enabled).toBe(true);expect(policy.archive.maxDepth).toBe(20);expect(policy.archive.maxRatio).toBe(50);expect(policy.archive.maxBytes).toBe(3000000000);expect(policy.maxScanBytes).toBe(1000000);expect(policy.oversizeAction).toBe('failed');expect(policy.largeFileScans).toBe(2);expect(policy.jobTimeoutSeconds).toBe(7200);await page.getByRole('button',{name:'File activity',exact:true}).click();
  await expect(page.getByLabel('Auto-refresh interval')).toHaveValue('0');
  await expect(page.getByRole('button',{name:'Preview cleanup',exact:true})).toBeVisible();
  await expect(page.getByRole('link',{name:'Export CSV',exact:true})).toBeVisible();

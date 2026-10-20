@@ -79,3 +79,11 @@ On engine restart, only its private captures directory is cleaned; scans re-down
 The processing-deadline alert is separate from the maximum job duration. Set the alert high enough for expected large-file work while keeping a bounded per-attempt timeout. Disk shortage waits do not consume the scan attempt budget. Existing held/retry jobs retain their captured policy; new size-policy changes apply to newly queued work.
 
 To investigate a file: search its name in File activity, inspect state, attempts, scan response and destination evidence. SCANNING includes source capture before SDK invocation. A terminal record and verified destination, rather than disappearance from the source alone, are the completion evidence.
+
+## Archive inspection operations
+
+See [archive limits and sandbox prerequisites](archive-inspection.md). The option defaults to off. No extra capabilities are required; Landlock and seccomp must be available. Unavailable confinement fails closed. Reserve original capture plus the configured expansion budget. Full SDK/member responses live in encrypted detail records; activity uses compact encrypted summaries. Workspace directories are engine-owned and removed after work or on restart. Profile changes do not rewrite queued snapshots.
+
+## Transfer worker controls
+
+`V1FS_TRANSFER_WORKERS` defaults to 4 (maximum 8), independent from `V1FS_MAX_WORKERS`. Profile transfer settings govern destination concurrency and Azure Blob block/request tuning. Lowering limits affects subsequent admissions. See [performance tuning](performance-tuning.md). A restart preserves the database/key volume and reconciles incomplete moves; an unuploaded temporary capture may be downloaded again. It does not delete history. Theme preferences live in each browser.

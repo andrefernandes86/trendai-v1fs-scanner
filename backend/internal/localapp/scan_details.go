@@ -12,9 +12,19 @@ type Detection struct {
 	Engine string `json:"engine,omitempty"`
 	File   string `json:"file,omitempty"`
 }
+type ArchiveSummary struct {
+	Complete           bool   `json:"complete"`
+	ExtractionComplete bool   `json:"extractionComplete"`
+	Entries            int    `json:"entries"`
+	Bytes              int64  `json:"expandedBytes"`
+	Depth              int    `json:"depth"`
+	Error              string `json:"error,omitempty"`
+}
 type ScanDetails struct {
+	ArchiveInspection *ArchiveSummary `json:"archiveInspection,omitempty"`
+
 	Detections []Detection     `json:"detections"`
-	Response   json.RawMessage `json:"response"`
+	Response   json.RawMessage `json:"response,omitempty"`
 }
 
 func extractDetections(raw []byte) []Detection {
@@ -40,6 +50,9 @@ func extractDetections(raw []byte) []Detection {
 				engine = e
 			}
 			file, _ := v["fileName"].(string)
+			if file == "" {
+				file, _ = v["file"].(string)
+			}
 			if name != "" {
 				key := engine + "\x00" + name + "\x00" + file
 				if !seen[key] {
@@ -75,12 +88,33 @@ func (a *App) recordScanDetails(id string, raw []byte, secret string) error {
 		cleaned = string(b)
 	}
 	details := ScanDetails{Detections: extractDetections([]byte(cleaned)), Response: json.RawMessage(cleaned)}
+	var envelope struct {
+		ArchiveInspection *ArchiveSummary `json:"archiveInspection"`
+	}
+	_ = json.Unmarshal([]byte(cleaned), &envelope)
+	details.ArchiveInspection = envelope.ArchiveInspection
 	sealed, e := a.Seal(details)
 	if e != nil {
 		return e
 	}
-	_, e = a.DB.Exec("INSERT INTO scan_details(job_id,payload) VALUES(?,?) ON CONFLICT(job_id) DO UPDATE SET payload=excluded.payload", id, sealed)
-	return e
+	public := details
+	public.Response = nil
+	compact, e := a.Seal(public)
+	if e != nil {
+		return e
+	}
+	tx, e := a.DB.Begin()
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback()
+	if _, e = tx.Exec("INSERT INTO scan_details(job_id,payload) VALUES(?,?) ON CONFLICT(job_id) DO UPDATE SET payload=excluded.payload", id, sealed); e != nil {
+		return e
+	}
+	if _, e = tx.Exec("INSERT INTO scan_summaries(job_id,payload) VALUES(?,?) ON CONFLICT(job_id) DO UPDATE SET payload=excluded.payload", id, compact); e != nil {
+		return e
+	}
+	return tx.Commit()
 }
 func (a *App) scanDetails(w http.ResponseWriter, r *http.Request) {
 	var b []byte

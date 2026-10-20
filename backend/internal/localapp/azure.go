@@ -15,6 +15,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/andrefernandes86/trendai-v1fs-scanner/internal/core"
 	client "github.com/trendmicro/tm-v1-fs-golang-sdk"
+	"hash/crc32"
 	"io"
 	"net"
 	"net/url"
@@ -172,21 +173,25 @@ func ListBlobs(ctx context.Context, m Mount, prefix, marker string, nativeTags .
 	return out, next, nil
 }
 func Download(ctx context.Context, s Snapshot, dir string) (name, digest string, err error) {
+	name, digest, _, err = DownloadChecksums(ctx, s, dir)
+	return
+}
+func DownloadChecksums(ctx context.Context, s Snapshot, dir string) (name, digest, crc string, err error) {
 	if s.Source.Type() != "blob" {
-		return downloadShare(ctx, s, dir)
+		return downloadShareChecksums(ctx, s, dir)
 	}
 	c, e := s.Source.BlobClient(s.Key, s.Version)
 	if e != nil {
-		return "", "", e
+		return "", "", "", e
 	}
 	r, e := c.DownloadStream(ctx, &blob.DownloadStreamOptions{AccessConditions: &blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfMatch: to.Ptr(azcore.ETag(s.ETag))}}})
 	if e != nil {
-		return "", "", e
+		return "", "", "", e
 	}
 	defer r.Body.Close()
 	f, e := os.CreateTemp(dir, "scan-*")
 	if e != nil {
-		return "", "", e
+		return "", "", "", e
 	}
 	defer f.Close()
 	defer func() {
@@ -195,16 +200,20 @@ func Download(ctx context.Context, s Snapshot, dir string) (name, digest string,
 		}
 	}()
 	h := sha256.New()
-	n, e := io.Copy(io.MultiWriter(f, h), io.LimitReader(r.Body, s.Size+1))
+	csum := crc32.New(crc32.MakeTable(crc32.Castagnoli))
+	n, e := io.Copy(io.MultiWriter(f, h, csum), io.LimitReader(r.Body, s.Size+1))
 	if e != nil {
-		return "", "", e
+		return "", "", "", e
 	}
 	if n != s.Size {
-		return "", "", errors.New("source size changed")
+		return "", "", "", errors.New("source size changed")
 	}
-	return f.Name(), hex.EncodeToString(h.Sum(nil)), nil
+	return f.Name(), hex.EncodeToString(h.Sum(nil)), fmt.Sprintf("%08x", csum.Sum32()), nil
 }
 func Route(ctx context.Context, m Mount, key, path, digest, job, verdict string, size int64, tagSets ...map[string]string) error {
+	return routeBytes(ctx, m, key, path, digest, job, verdict, size, true, 2, 8, tagSets...)
+}
+func routeBytes(ctx context.Context, m Mount, key, path, digest, job, verdict string, size int64, verifyNow bool, parallel, blockMiB int, tagSets ...map[string]string) error {
 	if m.Type() != "blob" {
 		if err := routeShare(ctx, m, key, path, digest, job, size); err != nil {
 			return err
@@ -241,13 +250,16 @@ func Route(ctx context.Context, m Mount, key, path, digest, job, verdict string,
 		return e
 	}
 	defer f.Close()
-	_, e = target.UploadFile(ctx, f, &blockblob.UploadFileOptions{BlockSize: 8 << 20, Concurrency: 2, AccessConditions: &blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETag("*"))}}, Metadata: map[string]*string{"job": &job, "sha256": &digest, "verdict": &verdict}})
+	_, e = target.UploadFile(ctx, f, &blockblob.UploadFileOptions{BlockSize: int64(blockMiB) << 20, Concurrency: uint16(parallel), AccessConditions: &blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETag("*"))}}, Metadata: map[string]*string{"job": &job, "sha256": &digest, "verdict": &verdict}})
 	if e != nil {
 		var re *azcore.ResponseError
 		if !errors.As(e, &re) || re.StatusCode != 412 {
 			return e
 		}
 	}
+	if !verifyNow {
+		return nil
+	} // Worker verifies both hashes once under a lease.
 	r, e := target.DownloadStream(ctx, nil)
 	if e != nil {
 		return e

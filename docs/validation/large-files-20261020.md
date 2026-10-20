@@ -22,7 +22,7 @@ During capture, container memory samples were approximately 36–74 MiB while th
 
 ## Validation boundaries
 
-No full 100 GB end-to-end or customer-scale soak certification is claimed. SDK outcomes remain subject to scanner inspection and format/extraction limits. The original file is not truncated or split by this application. Archive extraction was discussed but not implemented. Customer validation should include supported large documents, representative archives, insufficient disk, scanner timeout, interrupted transfer/restart and verified deletion under load.
+No full 100 GB end-to-end or customer-scale soak certification is claimed. SDK outcomes remain subject to scanner inspection and format/extraction limits. The original file is not truncated or split by this application. At the time of this large-file observation, extraction was not implemented. A later opt-in archive feature is documented in [archive inspection](../archive-inspection.md). Customer validation should include supported large documents, representative archives, insufficient disk, scanner timeout, interrupted transfer/restart and verified deletion under load.
 
 ### First live SDK outcome
 

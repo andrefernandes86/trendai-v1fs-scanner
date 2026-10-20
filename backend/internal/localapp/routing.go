@@ -29,17 +29,9 @@ func routeResult(ctx context.Context, id string, s Snapshot, local, digest, verd
 	if sameStorageRoot(s.Source, target) {
 		return "", "", errors.New("destination must differ from source")
 	}
-	if verdict == "OVERSIZED" || verdict == "OVERSIZED_CLEAN" {
-		tags = map[string]string{"scanned": "false", "verdict": "not_scanned", "reason": "oversized"}
-	} else if verdict == "EXCLUDED" {
-		tags = map[string]string{"scanned": "false", "verdict": "excluded"}
-	} else if verdict == "CLEAN" || verdict == "MALICIOUS" {
-		tags, err = s.Profile.ResultTags(verdict)
-		if err != nil {
-			return "", "", err
-		}
-	} else {
-		tags = map[string]string{"scanned": "false", "verdict": "scan_failed"}
+	tags, err = routingTags(s.Profile, verdict)
+	if err != nil {
+		return "", "", err
 	}
 	parts := []string{}
 	name := path.Base(s.Key)
@@ -54,8 +46,27 @@ func routeResult(ctx context.Context, id string, s Snapshot, local, digest, verd
 	if !core.ValidKey(key) {
 		return "", "", errors.New("invalid destination key")
 	}
-	if err = Route(ctx, target, key, local, digest, id, verdict, s.Size, tags); err != nil {
+	if err = routeBytes(ctx, target, key, local, digest, id, verdict, s.Size, target.Type() != "blob", defaultInt(s.Profile.UploadConcurrency, 2), defaultInt(s.Profile.UploadBlockMiB, 8), tags); err != nil {
 		return "", "", err
 	}
 	return target.BaseURL() + "/" + key, state, nil
+}
+
+func routingTags(p Profile, verdict string) (map[string]string, error) {
+	var tags map[string]string
+	var err error
+	if verdict == "OVERSIZED" || verdict == "OVERSIZED_CLEAN" {
+		tags = map[string]string{"scanned": "false", "verdict": "not_scanned", "reason": "oversized"}
+	} else if verdict == "EXCLUDED" {
+		tags = map[string]string{"scanned": "false", "verdict": "excluded"}
+	} else if verdict == "CLEAN" || verdict == "MALICIOUS" {
+		tags, err = p.ResultTags(verdict)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		tags = map[string]string{"scanned": "false", "verdict": "scan_failed"}
+	}
+
+	return tags, nil
 }

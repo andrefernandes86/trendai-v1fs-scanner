@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/andrefernandes86/trendai-v1fs-scanner/internal/core"
+	"hash/crc32"
 	"io"
 	"net"
 	"net/url"
@@ -277,23 +278,27 @@ func listShare(ctx context.Context, m Mount, prefix, marker string) ([]BlobEntry
 	return out, next, nil
 }
 func downloadShare(ctx context.Context, s Snapshot, dir string) (name, digest string, err error) {
+	name, digest, _, err = downloadShareChecksums(ctx, s, dir)
+	return
+}
+func downloadShareChecksums(ctx context.Context, s Snapshot, dir string) (name, digest, crc string, err error) {
 	fs, e := remoteOpen(ctx, s.Source)
 	if e != nil {
-		return "", "", e
+		return "", "", "", e
 	}
 	defer fs.Close()
 	before, e := remoteProperties(fs, s.sourceKey())
 	if e != nil || before.ETag != s.sourceETag() || before.Size != s.Size {
-		return "", "", errors.New("source identity changed")
+		return "", "", "", errors.New("source identity changed")
 	}
 	r, e := fs.Open(s.sourceKey())
 	if e != nil {
-		return "", "", e
+		return "", "", "", e
 	}
 	defer r.Close()
 	f, e := os.CreateTemp(dir, "share-scan-*")
 	if e != nil {
-		return "", "", e
+		return "", "", "", e
 	}
 	defer f.Close()
 	defer func() {
@@ -302,15 +307,16 @@ func downloadShare(ctx context.Context, s Snapshot, dir string) (name, digest st
 		}
 	}()
 	h := sha256.New()
-	n, e := io.Copy(io.MultiWriter(f, h), io.LimitReader(r, s.Size+1))
+	csum := crc32.New(crc32.MakeTable(crc32.Castagnoli))
+	n, e := io.Copy(io.MultiWriter(f, h, csum), io.LimitReader(r, s.Size+1))
 	if e != nil {
-		return "", "", e
+		return "", "", "", e
 	}
 	after, e := remoteProperties(fs, s.sourceKey())
 	if e != nil || n != s.Size || after.ETag != before.ETag {
-		return "", "", errors.New("source changed during download")
+		return "", "", "", errors.New("source changed during download")
 	}
-	return f.Name(), hex.EncodeToString(h.Sum(nil)), nil
+	return f.Name(), hex.EncodeToString(h.Sum(nil)), fmt.Sprintf("%08x", csum.Sum32()), nil
 }
 func verifyRemote(fs remoteFS, key, digest string, size int64) error {
 	if e := noLinks(fs, key); e != nil {

@@ -48,6 +48,19 @@ Watchdog fault tests cover abrupt child termination and a completely stopped/unr
 
 - [x] Remove 2 GiB application rejection; up to 100 GB SDK submission, profile size/oversize policy, streaming verification, disk admission, long-job timeouts and large-file concurrency.
 - [ ] Full 100 GB end-to-end and customer-scale throughput/soak validation; distinguish engine inspection limits from submission capability.
-- [ ] Optional archive extraction: proposal only, implementation not authorized. Isolated ZIP/TAR-GZIP workers, strict expansion/path/time budgets, per-entry evidence; incomplete extraction never clean.
+- [x] Optional profile-controlled ZIP/ZIP64, TAR and GZIP inspection; up to 20 layers, shared bomb limits, isolated extraction, per-member evidence, incomplete results never clean.
 
-- [ ] Investigate the live VPLE.zip SDK/ATSE -82 response with vendor error-code guidance. Application now submits the original 3.73 GB file; UNKNOWN is retained and bounded retries apply. Do not reclassify as clean from zero detections when the engine reports an error. Archive extraction remains unimplemented pending approval.
+- [ ] Investigate the live VPLE.zip SDK/ATSE -82 response with vendor error-code guidance. Application now submits the original 3.73 GB file; UNKNOWN is retained and bounded retries apply. Do not reclassify as clean from zero detections when the engine reports an error. Archive inspection is available as an opt-in feature; original SDK engine errors are not overridden.
+
+- [ ] Additional extraction formats (7z/RAR/etc.) and encrypted-archive password handling after separate design/security review.
+
+## Console and transfer improvements
+
+- [x] Persistent browser light/dark toggle, including sign-in and mobile layouts.
+- [x] Compact outcome-based destination editor, processing assurance cards and removal of the redundant overview banner.
+- [x] Four-input basic sizing with expandable expert settings and breakdown.
+- [x] Reversible hidden activity records; CSV, accounting, held alerts and history remain intact.
+- [x] Verified recursive source listing for Blob and Azure Files/SMB/NFS, with link/depth safety.
+- [x] Independent bounded scan/transfer pools; per-profile total/large transfer limits and Blob upload tuning.
+- [x] One leased SHA-256/CRC32C Blob readback, capture checksum reuse, stage timings and CSV timing export.
+- [ ] New customer-sized performance/soak measurements after transfer optimization; prior benchmark numbers remain historical.
