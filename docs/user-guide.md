@@ -238,3 +238,7 @@ Source discovery is recursive by default. Azure Blob lists every blob under the 
 A `runtimecheck/` destination folder can remain from the optional runtime validation utility. It holds earlier test results, is not a scanner component, and is not needed for normal operation. The utility runs only when explicitly invoked. Hide its historical records if desired; remove stored test files only after confirming they are no longer needed. The application's Hide record action does not delete storage objects.
 
 See [transfer tuning](performance-tuning.md) for queue controls and file timing details.
+
+Sizing fields include examples for daily file counts, processing windows, average versus maximum sizes, and storage allowances. Expand **Size units and a worked example** for MiB/GB conversions and the 12,000-file example. Advanced timing, peak-arrival and spare-capacity descriptions reflect the values you enter.
+
+![Sizing units and worked example](images/sizing-legend.png)

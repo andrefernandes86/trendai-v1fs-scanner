@@ -76,3 +76,5 @@
 .job-row-actions{display:flex;align-items:center;gap:10px}.history-visibility select{padding:6px;margin-left:7px;font-size:11px}
 
 .scan-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}.scan-metrics>div{min-width:0}@media(max-width:1050px){.scan-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.sizing-legend{padding:14px 16px;border:1px solid var(--dark-border,#dfe6ef);border-radius:8px;background:var(--dark-surface-alt,#f6f8fc)}.sizing-legend p{margin-top:12px;font-size:12px}.sizing-panel .field small{font-size:11px;line-height:1.65}
