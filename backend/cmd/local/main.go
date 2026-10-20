@@ -13,18 +13,25 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 1 {
+		supervise()
+		return
+	}
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "-supervise":
 			supervise()
 			return
+		case "-scan":
+			runIsolatedScan()
+			return
 		case "-healthcheck":
-			if e := healthCheck(); e != nil {
+			if e := containerHealthCheck(); e != nil {
 				log.Print(e)
 				os.Exit(1)
 			}
 			return
-		case "-serve":
+		case "-serve", "-engine":
 		default:
 			log.Fatal("Unknown command")
 		}
@@ -37,14 +44,30 @@ func main() {
 	if web == "" {
 		web = "../dist"
 	}
-	a, e := localapp.Open(data, web)
+	os.Setenv("V1FS_SCAN_SUBPROCESS", "1")
+	role := "api"
+	if len(os.Args) > 1 && os.Args[1] == "-engine" {
+		role = "engine"
+	}
+	var a *localapp.App
+	var e error
+	if role == "engine" {
+		a, e = localapp.OpenEngine(data, web)
+	} else {
+		a, e = localapp.OpenAPI(data, web)
+	}
 	if e != nil {
 		log.Fatal("Cannot open local scanner storage: ", e)
 	}
 	defer a.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	a.Run(ctx)
+	if role == "engine" {
+		a.Run(ctx)
+		a.PublishEngineHealth(ctx)
+		return
+	}
+	a.StartManagement()
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8095"

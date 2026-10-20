@@ -53,7 +53,11 @@ func (a *App) liveness(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		status = 503
 	}
-	respond(w, status, map[string]any{"healthy": ok, "checks": checks, "scope": "API, database, scheduler and worker progress. Remote storage/scanner outages are processing-readiness failures, not restart triggers."})
+	result := map[string]any{"healthy": ok, "checks": checks, "scope": "Management API and database. Processing engine is supervised independently; remote service outages use retries."}
+	if a.managementOnly {
+		result["engine"] = EngineHealth(a.DataDir)
+	}
+	respond(w, status, result)
 }
 
 func (a *App) stopBeat(name string) {

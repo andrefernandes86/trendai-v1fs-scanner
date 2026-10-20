@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	_ "modernc.org/sqlite"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -18,9 +19,10 @@ import (
 )
 
 type App struct {
-	healthMu   sync.Mutex
-	heartbeats map[string]time.Time
-	started    time.Time
+	managementOnly bool
+	healthMu       sync.Mutex
+	heartbeats     map[string]time.Time
+	started        time.Time
 
 	lockFile        *os.File
 	wg              sync.WaitGroup
@@ -74,6 +76,7 @@ type Profile struct {
 	ControlledWriter          bool       `json:"controlledWriter"`
 	ProcessingDeadlineSeconds int        `json:"processingDeadlineSeconds"`
 
+	SimultaneousScans   int    `json:"simultaneousScans"`
 	FailedMount         string `json:"failedMount"`
 	FailedPrefix        string `json:"failedPrefix"`
 	ScanIntervalSeconds int    `json:"scanIntervalSeconds"`
@@ -134,7 +137,15 @@ type Job struct {
 	UpdatedAt            string         `json:"updatedAt"`
 }
 
-func Open(data, web string) (*App, error) {
+func Open(data, web string) (*App, error)       { return openRole(data, web, "combined") }
+func OpenAPI(data, web string) (*App, error)    { return openRole(data, web, "api") }
+func OpenEngine(data, web string) (*App, error) { return openRole(data, web, "engine") }
+func openRole(data, web, role string) (*App, error) {
+	var pathErr error
+	data, pathErr = filepath.Abs(data)
+	if pathErr != nil {
+		return nil, pathErr
+	}
 	if e := os.MkdirAll(data, 0700); e != nil {
 		return nil, e
 	}
@@ -161,7 +172,11 @@ func Open(data, web string) (*App, error) {
 	} else if e != nil {
 		return nil, e
 	}
-	lock, e := os.OpenFile(filepath.Join(data, "instance.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	lockName := "instance.lock"
+	if role == "engine" {
+		lockName = "engine.lock"
+	}
+	lock, e := os.OpenFile(filepath.Join(data, lockName), os.O_CREATE|os.O_RDWR, 0600)
 	if e != nil {
 		return nil, e
 	}
@@ -183,11 +198,14 @@ func Open(data, web string) (*App, error) {
 	if e != nil {
 		return nil, e
 	}
-	db, e := sql.Open("sqlite", filepath.Join(data, "scanner.db"))
+	db, e := sql.Open("sqlite", (&url.URL{Scheme: "file", Path: filepath.Join(data, "scanner.db")}).String()+"?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_txlock=immediate")
 	if e != nil {
 		return nil, e
 	}
 	db.SetMaxOpenConns(1)
+	if role == "api" {
+		db.SetMaxOpenConns(4)
+	}
 	_, e = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;
 CREATE TABLE IF NOT EXISTS config(kind TEXT NOT NULL,id TEXT NOT NULL,value BLOB NOT NULL,PRIMARY KEY(kind,id));
 CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,expires INTEGER NOT NULL);
@@ -202,13 +220,19 @@ CREATE TABLE IF NOT EXISTS scan_results(job_id TEXT PRIMARY KEY, scanned_at TEXT
 CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,key TEXT NOT NULL,profile_id TEXT NOT NULL,profile_name TEXT NOT NULL,source_id TEXT NOT NULL,etag TEXT NOT NULL,version TEXT NOT NULL,size INTEGER NOT NULL,state TEXT NOT NULL,verdict TEXT NOT NULL DEFAULT 'UNKNOWN',digest TEXT NOT NULL DEFAULT '',destination TEXT NOT NULL DEFAULT '',error TEXT NOT NULL DEFAULT '',attempts INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,available_at INTEGER NOT NULL,snapshot BLOB NOT NULL);
 CREATE INDEX IF NOT EXISTS pending_jobs ON jobs(state,available_at);
 CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT,at TEXT NOT NULL,action TEXT NOT NULL,object_id TEXT NOT NULL,detail TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS jobs_history_page ON jobs(created_at DESC,id DESC);
+CREATE INDEX IF NOT EXISTS jobs_newer_completed ON jobs(source_id,key,profile_id,created_at DESC) WHERE state IN ('COMPLETED','QUARANTINED');
+CREATE INDEX IF NOT EXISTS jobs_active_version ON jobs(profile_id,source_id,key,etag,version) WHERE state IN ('QUEUED','SCANNING','ROUTING','RETRY_PENDING');
+CREATE INDEX IF NOT EXISTS jobs_active_profile ON jobs(profile_id,state);
 CREATE TABLE IF NOT EXISTS observations(profile_id TEXT NOT NULL,key TEXT NOT NULL,etag TEXT NOT NULL,first_seen INTEGER NOT NULL,PRIMARY KEY(profile_id,key));`)
 	if e != nil {
 		db.Close()
 		return nil, e
 	}
-	a := &App{lockFile: lock, DB: db, aead: ae, DataDir: data, WebDir: web, wake: make(chan struct{}, 1)}
-	_, e = db.Exec("UPDATE jobs SET state='QUEUED' WHERE state IN ('SCANNING','ROUTING')")
+	a := &App{managementOnly: role == "api", lockFile: lock, DB: db, aead: ae, DataDir: data, WebDir: web, wake: make(chan struct{}, 1)}
+	if role != "api" {
+		_, e = db.Exec("UPDATE jobs SET state='QUEUED' WHERE state IN ('SCANNING','ROUTING')")
+	}
 	success = e == nil
 	return a, e
 }
@@ -294,9 +318,12 @@ func (a *App) Close() error {
 func (a *App) Run(ctx context.Context) {
 	a.healthMu.Lock()
 	a.started = time.Now()
-	a.heartbeats = map[string]time.Time{"monitor": time.Now(), "worker-0": time.Now(), "worker-1": time.Now()}
+	a.heartbeats = map[string]time.Time{"monitor": time.Now()}
+	for i := 0; i < WorkerLimit(); i++ {
+		a.heartbeats[fmt.Sprintf("worker-%d", i)] = time.Now()
+	}
 	a.healthMu.Unlock()
-	for i := 0; i < 2; i++ {
+	for i := 0; i < WorkerLimit(); i++ {
 		a.wg.Add(1)
 		go func(index int) { defer a.wg.Done(); a.workerNamed(ctx, fmt.Sprintf("worker-%d", index)) }(i)
 	}

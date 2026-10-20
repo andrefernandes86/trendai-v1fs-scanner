@@ -6,13 +6,16 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"github.com/andrefernandes86/trendai-v1fs-scanner/internal/localapp"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -80,9 +83,57 @@ func supervise() {
 	if e != nil {
 		log.Fatal(e)
 	}
+	data := os.Getenv("V1FS_DATA_DIR")
+	if data == "" {
+		data = "data"
+	}
+	if err := os.MkdirAll(data, 0700); err != nil {
+		log.Fatal(err)
+	}
+	lock, err := os.OpenFile(filepath.Join(data, "supervisor.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer lock.Close()
+	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		log.Fatal("Another supervisor owns this data directory")
+	}
+	// Initialize schema/key once before either child opens the shared WAL database.
+	app, err := localapp.Open(data, "")
+	if err != nil {
+		log.Fatal(err)
+	}
+	app.Close()
+	_ = os.Remove(filepath.Join(data, "engine-health.json"))
+	var group sync.WaitGroup
+	for _, role := range []string{"-serve", "-engine"} {
+		group.Add(1)
+		go func(role string) { defer group.Done(); superviseProcess(ctx, executable, role) }(role)
+	}
+	group.Wait()
+}
+func containerHealthCheck() error {
+	if err := healthCheck(); err != nil {
+		return err
+	}
+	return engineHealthCheck()
+}
+func engineHealthCheck() error {
+	data := os.Getenv("V1FS_DATA_DIR")
+	if data == "" {
+		data = "data"
+	}
+	health := localapp.EngineHealth(data)
+	if health["healthy"] != true {
+		return fmt.Errorf("processing engine unavailable")
+	}
+	return nil
+}
+func superviseProcess(ctx context.Context, executable, role string) {
+	var e error
 	backoff := time.Second
 	for ctx.Err() == nil {
-		cmd := exec.Command(executable, "-serve")
+		cmd := exec.Command(executable, role)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Stdin = nil
@@ -96,7 +147,7 @@ func supervise() {
 			backoff = min(backoff*2, 30*time.Second)
 			continue
 		}
-		log.Printf("Supervisor started scanner PID %d", cmd.Process.Pid)
+		log.Printf("Supervisor started %s PID %d", role, cmd.Process.Pid)
 		exited := make(chan error, 1)
 		go func() { exited <- cmd.Wait() }()
 		interval := supervisorDuration("V1FS_WATCHDOG_INTERVAL_SECONDS", 5*time.Second)
@@ -126,7 +177,11 @@ func supervise() {
 				if time.Since(started) < supervisorDuration("V1FS_WATCHDOG_STARTUP_SECONDS", 20*time.Second) {
 					continue
 				}
-				if err := healthCheck(); err != nil {
+				check := healthCheck
+				if role == "-engine" {
+					check = engineHealthCheck
+				}
+				if err := check(); err != nil {
 					failures++
 					log.Printf("Scanner watchdog check %d/3 failed: %v", failures, err)
 				} else {
@@ -136,7 +191,7 @@ func supervise() {
 					}
 				}
 				if failures >= 3 {
-					log.Printf("Restarting unhealthy scanner process")
+					log.Printf("Restarting unhealthy %s process", role)
 					terminate()
 					finished = true
 				}

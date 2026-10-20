@@ -3,6 +3,7 @@ package localapp
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -110,6 +111,21 @@ func (a *App) insertJob(s Snapshot) (string, error) {
 		return "", e
 	}
 	defer tx.Rollback()
+	// A profile edit must not create a second owner for the same active source version.
+	var existingID string
+	var existingSnapshot []byte
+	lookupErr := tx.QueryRow("SELECT id,snapshot FROM jobs WHERE profile_id=? AND source_id=? AND key=? AND etag=? AND version=? AND state IN ('QUEUED','SCANNING','ROUTING','RETRY_PENDING') ORDER BY created_at LIMIT 1", s.Profile.ID, s.Source.ID, s.Key, s.ETag, s.Version).Scan(&existingID, &existingSnapshot)
+	if lookupErr == nil {
+		var previous Snapshot
+		if err := a.Unseal(existingSnapshot, &previous); err != nil {
+			return "", err
+		}
+		if previous.Source.BaseURL() == s.Source.BaseURL() {
+			return existingID, nil
+		}
+	} else if lookupErr != sql.ErrNoRows {
+		return "", lookupErr
+	}
 	r, e := tx.Exec("INSERT OR IGNORE INTO jobs(id,key,profile_id,profile_name,source_id,etag,version,size,state,created_at,updated_at,available_at,snapshot) VALUES(?,?,?,?,?,?,?,?,'QUEUED',?,?,?,?)", id, s.Key, s.Profile.ID, s.Profile.Name, s.Source.ID, s.ETag, s.Version, s.Size, stamp(), stamp(), time.Now().Unix(), payload)
 	if e != nil {
 		return "", e
@@ -188,6 +204,23 @@ func (a *App) transition(id, state, verdict, digest, destination, message string
 }
 func (a *App) claim() (string, Snapshot, int, error) {
 	var s Snapshot
+	profiles, err := a.List("profiles")
+	if err != nil {
+		return "", s, 0, err
+	}
+	limits := "CASE j.profile_id"
+	parameters := []any{time.Now().Unix()}
+	for _, raw := range profiles {
+		var p Profile
+		if json.Unmarshal(raw, &p) == nil {
+			limits += " WHEN ? THEN ?"
+			parameters = append(parameters, p.ID, min(defaultInt(p.SimultaneousScans, 2), WorkerLimit()))
+		}
+	}
+	limits += " ELSE 2 END"
+	if len(parameters) == 1 {
+		limits = "2"
+	}
 	tx, e := a.DB.Begin()
 	if e != nil {
 		return "", s, 0, e
@@ -196,7 +229,7 @@ func (a *App) claim() (string, Snapshot, int, error) {
 	var id string
 	var b []byte
 	var attempts int
-	e = tx.QueryRow("SELECT id,snapshot,attempts FROM jobs WHERE state IN ('QUEUED','RETRY_PENDING') AND available_at<=? ORDER BY created_at LIMIT 1", time.Now().Unix()).Scan(&id, &b, &attempts)
+	e = tx.QueryRow("SELECT j.id,j.snapshot,j.attempts FROM jobs j WHERE j.state IN ('QUEUED','RETRY_PENDING') AND j.available_at<=? AND (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.state IN ('SCANNING','ROUTING')) < "+limits+" ORDER BY j.created_at,j.id LIMIT 1", parameters...).Scan(&id, &b, &attempts)
 	if e != nil {
 		return "", s, 0, e
 	}

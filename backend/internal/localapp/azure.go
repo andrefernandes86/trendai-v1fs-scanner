@@ -274,6 +274,14 @@ func (a *App) Scan(ctx context.Context, path string, s Scanner, p Profile) ([]by
 	if a.scanFn != nil {
 		return a.scanFn(ctx, path, s, p)
 	}
+	if os.Getenv("V1FS_SCAN_SUBPROCESS") == "1" {
+		return scanSubprocess(ctx, path, s, p)
+	}
+	return a.ScanDirect(ctx, path, s, p)
+}
+
+// ScanDirect is called only inside a dedicated SDK child process in production.
+func (a *App) ScanDirect(ctx context.Context, path string, s Scanner, p Profile) ([]byte, error) {
 	for !a.scanMu.TryLock() {
 		select {
 		case <-ctx.Done():

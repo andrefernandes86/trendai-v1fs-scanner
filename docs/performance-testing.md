@@ -19,3 +19,5 @@ Latency definitions: upload = client request duration; discovery = upload comple
 Record machine resources, health/restarts, profile timing, worker count, data sizes, upload timing and stage failures alongside results. Report verdict changes caused by content-based engines separately from transfer errors. Successful movement requires persisted checksum verification and COMPLETED move phase, including source deletion. A held terminal job is accounted for but is not a successful clean/malicious promotion.
 
 After completion, `-check-prefix loadtests/RUN/SCENARIO/` performs an independent read-only source listing and writes `source-check.json`, without uploading anything. The report for the measured host run is [available here](performance-results-2026-10-20.md).
+
+For API responsiveness under actual parallel scans and a live profile-limit change, see [runtime isolation validation](runtime-isolation-validation.md). That test uses a separate data directory and temporary source container, so the production source monitor cannot compete for its inputs.

@@ -5,6 +5,7 @@ services:
     ports: ['8095:8095']
     environment:
       PORT: '8095'
+      V1FS_MAX_WORKERS: '${V1FS_MAX_WORKERS:-8}'
       V1FS_DATA_DIR: /data
       V1FS_WEB_DIR: /app/dist
     volumes: ['scanner-data:/data']

@@ -77,8 +77,9 @@ Open **Scan profiles → New profile** (or **Create scan profile** when no profi
 2. Under **Source**, select **Incoming files**. Leave the source prefix blank unless you want only one folder scanned.
 3. Under **Destinations**, choose **Clean files**, **Malicious files** and **Scan failed** in their corresponding sections. Leave destination prefixes blank to use each location's root.
 4. Enable **automatic source scanning** and choose a frequency, such as **30 seconds**. The minimum is 10 seconds.
-5. Keep the initial detection/retry settings unless your security administrator needs different behavior.
-6. Click **Save profile**.
+5. Set **Simultaneous scans** to the number of files this profile may process at once (default **2**). The shared engine has **8** slots by default, so a higher profile setting cannot exceed available capacity. Start conservatively and increase after checking scanner quotas and storage performance.
+6. Keep the initial detection/retry settings unless your security administrator needs different behavior.
+7. Click **Save profile**.
 
 ![Source and routing settings](images/profile-routing.png)
 
@@ -87,6 +88,8 @@ The three destinations each have their own selection:
 ![Clean, malicious and scan-failed destinations](images/profile-destinations.png)
 
 Only the profile's source is monitored. Its destinations are not automatically scanned by that profile. Avoid overlapping sources across profiles so two workflows do not compete for the same inputs.
+
+A profile slot stays occupied through download, scanning and routing. Lowering concurrency lets existing work finish before admitting more. Changes to concurrency apply to the existing queue, while each job keeps its captured scan/routing policy. The management console runs independently of the engine and shows whether it is running or recovering.
 
 The frequency controls when the tool checks for files; it is not a promise to finish every scan in that time. A new file must stay unchanged across checks before admission. Uploads that are still changing wait; a paused upload can appear stable. Large batches also take time to discover and process.
 
@@ -130,6 +133,7 @@ These profile buttons exercise the real storage, scheduler, scanner and routing 
 
 In **Overview → Files scanned**:
 
+- **Pending scans** shows files queued for scanning, including files waiting for a scan retry. It excludes held files and pending transfers with known verdicts.
 - **Scanning now** shows jobs currently in the scanning stage, including source download and waiting for scanner access. It excludes queued files and destination transfers. Zero can simply mean the scanner is idle.
 - **Past minute/hour/24 hours/30 days** are rolling totals for jobs with a scanner response. They are not queue counts. Open **How counts are calculated** for details.
 - Set **Auto-refresh** to the update interval you want, or choose Off and use **Refresh**. The current count is a snapshot from the latest refresh. This setting is available on Overview, File activity and Audit log, and is remembered in your browser.

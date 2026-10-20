@@ -43,7 +43,7 @@ The direct-binary and optional `deploy/` systemd files are alternatives for othe
 
 ## Container-first host deployment
 
-The container includes an internal process supervisor/watchdog. Use the normal named volume for a new deployment:
+The container independently supervises the management API and processing engine, with isolated SDK child processes for concurrent scanning. Use the normal named volume for a new deployment:
 
 ```bash
 docker compose up -d --build
@@ -60,6 +60,10 @@ docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml up -d --buil
 
 Stop a previous foreground scanner before starting the container so port 8095 and the data lock are free. Do not run both against the same data. Inspect health with `docker compose ps` and `/livez`; verify actual safe/EICAR routing separately. Keep the persistent data mount through rebuilds; never use `down -v` as an upgrade step. Docker must be enabled at host boot; it is enabled on the current host. The earlier systemd application unit is optional for a direct binary deployment, not required for the container.
 
+Set `V1FS_MAX_WORKERS=8` (1–32) when running Compose to control total engine capacity; then set **Simultaneous scans** per profile in the console. Each slot includes download and routing as well as scanning. Changing the global setting recreates the container; profile limits change live without interrupting active jobs. A profile above the global limit shares only available global slots.
+
 The watchdog uses 20 seconds of startup grace, 5-second checks and 3 failed checks before restart. Optional V1FS_WATCHDOG_STARTUP_SECONDS and V1FS_WATCHDOG_INTERVAL_SECONDS settings can be used in controlled tests. A child gets SIGTERM and up to ten seconds before SIGKILL. Docker stop_grace_period is forty seconds. External scanner/storage outages do not trigger liveness restarts; they remain visible retry/assurance conditions. External notification delivery is deferred at the user's request.
 
 Share sources need read, rename, mkdir and delete rights inside their source root. Reserve `.v1fs-claims` for the scanner account. Do not treat claimed files as lost: their original and private paths appear in record details and persist across restarts. Never manually clear claims while jobs are active. Customer load/scale validation is run separately by the customer.
+
+Management `/livez` returns the API/database result with a separate engine field; it remains available during engine recovery. The Docker healthcheck requires both services. The engine publishes its progress heartbeat every second, with a 15-second freshness limit. Each service restarts independently; never delete queue/transfer evidence to recover a service. Use `docker compose logs` to distinguish `-serve` and `-engine` child PIDs. The browser prevents overlapping automatic refresh batches, and indexed history/read connections keep normal management reads independent of engine writes.

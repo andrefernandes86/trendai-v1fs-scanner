@@ -33,7 +33,7 @@ func TestStatisticsAndFullCSVExport(t *testing.T) {
 		t.Fatal(e)
 	}
 	// Include active jobs outside the latest-500 table, but exclude queued/routing jobs.
-	if _, e = a.DB.Exec("UPDATE jobs SET state='SCANNING' WHERE id IN ('3','504'); UPDATE jobs SET state='QUEUED' WHERE id='4'; UPDATE jobs SET state='ROUTING' WHERE id='5'"); e != nil {
+	if _, e = a.DB.Exec("UPDATE jobs SET state='SCANNING' WHERE id IN ('3','504'); UPDATE jobs SET state='QUEUED' WHERE id='4'; UPDATE jobs SET state='ROUTING' WHERE id='5'; UPDATE jobs SET state='RETRY_PENDING' WHERE id='6'; UPDATE jobs SET state='RETRY_PENDING' WHERE id='0'"); e != nil {
 		t.Fatal(e)
 	}
 	// One historical clean result, one old malicious result, and one new unknown response.
@@ -44,11 +44,15 @@ func TestStatisticsAndFullCSVExport(t *testing.T) {
 	w := httptest.NewRecorder()
 	a.statistics(w, httptest.NewRequest("GET", "http://localhost/api/statistics", nil))
 	var out struct {
-		Counts      map[string]int `json:"counts"`
-		ScanningNow int            `json:"scanningNow"`
+		Counts       map[string]int `json:"counts"`
+		ScanningNow  int            `json:"scanningNow"`
+		PendingScans int            `json:"pendingScans"`
 	}
 	if e = json.Unmarshal(w.Body.Bytes(), &out); e != nil {
 		t.Fatal(e)
+	}
+	if out.PendingScans != 2 {
+		t.Fatalf("pending scans=%d, want queued and unknown retry only", out.PendingScans)
 	}
 	if out.ScanningNow != 2 {
 		t.Fatalf("scanning now = %d, want 2", out.ScanningNow)

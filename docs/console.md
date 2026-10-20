@@ -13,7 +13,7 @@ Enter comma-separated key=value tags. Common tags combine with clean/malicious t
 
 ## Refresh and export
 
-Overview shows **Scanning now** before the historical totals. It counts all jobs currently in the SCANNING stage, including source download and waiting for the scanner, excluding queued work and destination transfers. It is a snapshot updated on page refresh.
+Overview shows **Pending scans** then **Scanning now** before historical totals. Pending scans includes queued/scan-retry waits, excluding held records and transfer-only retries. It counts all jobs currently in the SCANNING stage, including source download and waiting for the scanner, excluding queued work and destination transfers. It is a snapshot updated on page refresh.
 
 Overview, File activity and Audit log offer Off/5s/10s/30s/1m/5m auto-refresh. Settings persist in the browser. Other pages do not automatically refresh. Manual Refresh is available. CSV export covers all historical jobs, not only the current table or filter, and includes verdict, malicious/unknown status, hash presence and SHA-256, timestamps, state, source, destination, errors and attempts. JSON export on File activity/Audit log covers currently loaded records.
 
@@ -38,3 +38,7 @@ Recovery applies to isolated UNKNOWN jobs after initial scan attempts have faile
 ## Reliability settings
 
 Profile sections 6–8 configure quiet periods/temporary ignores, retries, exclusions/hold rules and isolated-file recovery. Preview exclusion matches before saving. Share deletion requires confirming the producer handoff and controlled destination-writer contract. Overview exposes processing alerts and inventory export; File activity provides date/verdict filters, pages and explicit retention preview/apply. Record details show integrity evidence and manual recovery/enrichment actions. See [reliability](reliability.md) for operational semantics.
+
+## Parallel processing
+
+Set **Simultaneous scans** in profile section 3 (default 2, range 1–32). The shared engine has 8 worker slots by default; an operator can change V1FS_MAX_WORKERS (1–32). Slots include download, scan, route and finalization. Raising a limit releases eligible queued work; lowering it waits for existing active files. The console and engine are independent processes with independent watchdog recovery. Overview shows engine state, shared capacity, Pending scans and Scanning now. Profile edits reuse an existing active source-version job instead of enqueueing duplicates.

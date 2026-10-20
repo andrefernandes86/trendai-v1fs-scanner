@@ -42,6 +42,9 @@ func (p Profile) FilePolicy(key string, size int64) (string, string) {
 	return "scan", ""
 }
 func (p Profile) ReliabilityValidate() error {
+	if p.SimultaneousScans < 0 || p.SimultaneousScans > 32 {
+		return fmt.Errorf("Simultaneous scans must be between 1 and 32, or 0 for the default of 2.")
+	}
 	for _, v := range []int{p.ScanAttempts, p.TransferAttempts, p.DeleteAttempts, p.RecoveryAttempts} {
 		if v < 0 || v > 100 {
 			return fmt.Errorf("Attempt limits must be between 1 and 100, or 0 for defaults.")

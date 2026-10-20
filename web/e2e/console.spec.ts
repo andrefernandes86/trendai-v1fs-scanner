@@ -8,6 +8,8 @@ test('profile policy editor and responsive toolbar remain usable',async({page})=
  }else{await page.waitForTimeout(2100); // Respect server authentication throttle.
  await page.getByLabel('Administrator password').fill('test-only-password-2026');await page.getByRole('button',{name:'Sign in',exact:true}).click()}
  await expect(page.getByRole('heading',{name:'Security overview'})).toBeVisible();
+ await expect(page.getByTestId('scan-metric-pending')).toContainText('Pending scans');
+ await expect(page.getByTestId('scan-metric-pending')).toContainText('0');
  await expect(page.getByTestId('scan-metric-now')).toContainText('Scanning now');
  await expect(page.getByTestId('scan-metric-now')).toContainText('0');
  await expect(page.getByLabel('Auto-refresh interval')).toBeVisible();
@@ -36,6 +38,10 @@ test('profile policy editor and responsive toolbar remain usable',async({page})=
  await page.screenshot({path:`../test-results/profile-${test.info().project.name}.png`,fullPage:true});
  const overflowing=await page.locator('[role="dialog"]').evaluate(el=>el.scrollWidth>el.clientWidth+2);expect(overflowing).toBe(false);
  await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ await page.locator('.source-card').filter({has:page.getByRole('heading',{name:'E2E policy',exact:true})}).getByRole('button',{name:'Edit profile',exact:true}).click();
+ await page.getByRole('spinbutton',{name:/^Simultaneous scans/}).fill('4');
+ await page.getByRole('button',{name:'Save profile',exact:true}).click();
+ await expect(page.locator('.source-card').filter({has:page.getByRole('heading',{name:'E2E policy',exact:true})})).toContainText('up to 4 simultaneous scans');
  await page.getByRole('button',{name:'File activity',exact:true}).click();
  await expect(page.getByLabel('Auto-refresh interval')).toHaveValue('0');
  await expect(page.getByRole('button',{name:'Preview cleanup',exact:true})).toBeVisible();

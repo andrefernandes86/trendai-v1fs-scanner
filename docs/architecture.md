@@ -1,39 +1,50 @@
 # Architecture
 
-The React/Vite console and authenticated Go API run on one host. SQLite stores configuration, jobs, scan timestamps, observations and audit records. Credentials and immutable job configuration snapshots are encrypted with AES-256-GCM using the host master key. Administrator passwords use bcrypt and sessions use HttpOnly cookies. Back up the database and master key together.
+A supervised container runs independent management and processing services. The React console is served by the management API. Discovery, the durable queue and file routing run in a separate engine process. Each SDK request runs in a short-lived child process so cloud/local endpoint environment settings cannot mix between concurrent scans.
 
-## Storage and scheduling
+```mermaid
+flowchart LR
+  Watchdog --> API[Management API and React console]
+  Watchdog --> Engine[Discovery and processing engine]
+  API <--> DB[(SQLite WAL)]
+  Engine <--> DB
+  Engine --> Scan[Isolated concurrent SDK children]
+  Scan --> Vision[Vision One cloud or local scanner]
+  Engine <--> Storage[Sources and routing destinations]
+```
 
-Connections support Azure Blob, Azure Files, SMB2/3 with signing, and NFSv3 TCP AUTH_SYS. They are application connections, not privileged operating-system mounts. Azure credentials use account keys or SAS; SMB supports user/password/domain; NFS uses UID/GID. Discovery permissions may differ from direct access permissions.
+## Process ownership and responsiveness
 
-Each profile has one source and distinct clean, malicious and scan-failed destinations. Only the source is automatically listed. Intervals default to 30 seconds and allow 10–86400 seconds. Files must remain unchanged across observations at least 10 seconds apart. Completion markers are not required. Stability is a heuristic, not proof against paused uploads. Azure list/property ETag comparisons normalize quotation formatting while downloads/deletes use the original server ETag.
+The supervisor initializes the database/key before launching either service, and watches each independently. API recovery does not reset in-flight jobs or restart the engine. Engine recovery requeues interrupted SCANNING/ROUTING jobs and resumes persisted transfer/handoff evidence. SDK children are terminated if their parent dies; jobs remain durable. Separate advisory locks prevent duplicate API/engine owners.
 
-## Scan and routing
+The API has a four-connection SQLite pool, with per-connection busy timeout and foreign-key settings. The engine serializes its database writes through one connection. WAL permits API reads while the engine writes. Indexed history pagination and indexed newer-version lookups avoid holding database access during repeated unindexed history scans. Browser auto-refresh requests do not overlap.
 
-Two workers drain the durable job queue. The official Trend Vision One Go SDK connects to a regional cloud scanner or local gRPC scanner. Calls that change SDK process environment settings are serialized. Scanner responses support compact results and verbose ATSE/TrendX results. Missing, unsupported or error-bearing engine results remain unknown; confirmed detections never promote to clean.
+The default engine capacity is **8 active files across all profiles**. Set `V1FS_MAX_WORKERS` (1–32) to change it. Each profile's **Simultaneous scans** setting defaults to 2 and accepts 1–32. Admission checks live per-profile limits atomically against SCANNING/ROUTING jobs, so a saturated profile does not block eligible profiles behind it. The effective limit is bounded by available global workers. A slot covers download, scanning, routing and finalization; this conservatively caps scanner requests too. Lowering a limit waits for active jobs to finish. Raising it admits queued jobs without changing their captured scan/routing policy. Diagnostics and explicit historical enrichment are direct administrator actions outside the queued worker pool.
 
-Routing copies the captured scan bytes to the selected destination, applies result tags, reads the destination back and verifies SHA-256. New names are `original-name_<job-id>.ext`. Blob tags are native index tags; shares use `.v1fs-tags.json` sidecars. Files are not converted to ZIP or password-protected. Share publication uses private staging and exclusive publication; NFS requires hard-link support.
+## State and security
 
-Only after destination verification does the app remove the unchanged source. Azure Blob uses conditional ETag deletion. Shares recheck identity and digest; concurrent mutation remains a limitation of SMB/NFS. Source deletion failures retain destination details and hold the record for review. Scan-failed files remain HELD even when successfully routed, because their verdict needs review.
+SQLite stores encrypted configuration and immutable job snapshots (AES-256-GCM), durable jobs, stage attempts, transfer/claim evidence, scan details, observations and audit history. The host master key and database must be backed up together. Administrator passwords use bcrypt; browser sessions use HttpOnly cookies. Credentials pass to SDK children through private standard input, never command-line arguments. Results return through a dedicated pipe, separate from SDK logging. The public engine heartbeat contains health/progress only.
 
-Retries reuse encrypted snapshots and verified verdicts; changing a profile affects newly queued jobs. Source identities generate deterministic job IDs to avoid duplicate submissions. Transfer and scan failures have bounded retries; interrupted jobs resume after restart.
+## Discovery and version ownership
 
-## Reporting
+Connections support Azure Blob, Azure Files, SMB2/3 signing and NFSv3 TCP AUTH_SYS. They are application connections, not privileged OS mounts. Each profile monitors one source and routes to distinct, non-overlapping clean, malicious and scan-failed destinations. Intervals are 10–86400 seconds, default 30. Files must remain unchanged across observations for the configured quiet period. Stability cannot prove a producer will never resume writing.
 
-Scan timestamps count distinct jobs with responses once. Older records without scan timestamps use last-update estimates. CSV streams all job records with verdicts, hashes, state, dates, attempts, errors and destination details, with spreadsheet formula protection. The UI activity list is limited to 500 records. No credential fields are exported.
+An active source version has one job per profile even if that profile is edited while work is queued. Existing jobs retain their original encrypted policy. Newly observed source versions use the current revision. Connection root identity is checked when reusing an active job. Source-only reconciliation accounts for observed file versions; files removed before polling cannot be guaranteed.
 
-Scanner detection details are stored encrypted in `scan_details`, separate from the public job columns. Compact `foundMalwares` and verbose per-engine `malware` entries are supported. API keys are redacted before persistence. Historical responses are not reconstructed from filenames.
+Share sources use persisted private claims under `.v1fs-claims/<job-id>/...`; producers must not write there. Claim recovery preserves a new upload at the original path. Blob source deletion is conditional on the captured ETag. Destination share finalization requires scanner-managed writers; Blob destinations use renewable leases during verification/deletion.
 
-## Planned customer assurance design
+## Verdicts, routing and recovery
 
-The backlog distinguishes implemented behavior from the proposed reliability protocol. Discovery reconciliation will account for every observed source version, while independent scan/copy/delete retry budgets prevent an outage in one stage from exhausting another. Scan-failed files will gain scheduled/manual recovery and escalation. These mechanisms are not yet an end-to-end no-missed-file guarantee.
+The official Vision One SDK handles cloud or local scanning. Compact and verbose ATSE/TrendX results are normalized. Error-bearing, incomplete or unsupported results remain UNKNOWN; detections never become clean because another engine failed.
 
-A planned exclusion policy will match explicit paths/patterns and route matching files directly to clean storage without submitting them to the scanner. Such records must carry an EXCLUDED/NOT SCANNED outcome, matched rule and policy revision; they must never be labeled scanner-verified CLEAN. Preview, audit, conservative precedence and reporting are required. Excluded bytes still follow the full verified-copy/delete protocol.
+Routing preserves original bytes, publishes without overwriting another file, reads back the destination and verifies size, SHA-256 and CRC32C before removing the unchanged source. Names are `original-name_<job-id>.ext`. The app adds no ZIP wrapping/password. Native Blob tags or share JSON sidecars record configured result tags.
 
-The planned durable move protocol captures source identity, size, SHA-256 and CRC32C, publishes without overwriting another file, reads the final destination back and compares all checksums, then persists DESTINATION_VERIFIED before attempting a conditional source delete. CRC32C detects accidental corruption; SHA-256 remains the stronger content identity check. A filename, existence check or ETag alone is insufficient. Destination identity must remain protected between verification and source deletion. Source deletion has independent retry/reconciliation state, including recovery after a crash when the source is already absent.
+Scan, transfer and deletion have separate bounded retry budgets. A verified scan is reused after transfer failure. UNKNOWN files route to scan-failed storage for review; configured recovery creates linked rescan jobs with bypass rules disabled. Exclusions are explicitly EXCLUDED / NOT SCANNED and still require transfer verification. Hold rules take priority and leave files at source.
 
-Blob supports conditional identity checks; SMB/NFS require an explicit handoff/ownership contract to close the check/unlink race against concurrent producers. Until that contract exists, ordinary identity/digest checks have a documented race limitation. Source replacements must remain intact and become a separately tracked version.
+## Dashboard and health
 
-## Durable reliability workflow
+Pending scans counts QUEUED/RETRY_PENDING jobs awaiting scanning with UNKNOWN verdict, including retry delays; it excludes held work and transfers with a known verdict. Scanning now counts SCANNING jobs. Routing is separate. Historical rolling totals count distinct jobs with scanner responses. All these counts query the full database, not the displayed activity page.
 
-The implemented state, integrity, reconciliation, recovery, exclusion and retry design is described in [reliability](reliability.md). Move records and retained scanner responses are encrypted. Console integrity summaries omit connection credentials. Source-version inventory and recovery links retain accounting across repeated listing and reprocessing.
+`/livez` reports management/database liveness and includes independently reported engine status. The engine publishes progress every second; stale or unhealthy engine health triggers its own watchdog restart. Container `-healthcheck` requires both services. Storage/scanner outages use processing retries rather than liveness restart loops. Overview exposes engine state and worker capacity so operators can inspect a recovering engine while the console remains available.
+
+CSV covers full history; the UI provides filtered pagination. Detection details are encrypted separately, with recorded malware names/engines exposed in authenticated record details. Credentials and raw snapshots are never exported. External notifications remain deferred.

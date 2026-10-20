@@ -1,6 +1,6 @@
 # trendai-v1fs-scanner
 
-A host-based Azure Blob, Azure Files, SMB and NFSv3 scanner with a React management console and the official Trend Vision One File Security Go SDK. The console and Go API run together. There is no external gateway, Event Grid, Service Bus, Azure deployment, or Entra setup requirement.
+A host-based Azure Blob, Azure Files, SMB and NFSv3 scanner with a React management console and the official Trend Vision One File Security Go SDK. The management API and scanning engine run in separate supervised processes inside one container. There is no external gateway, Event Grid, Service Bus, Azure deployment, or Entra setup requirement.
 
 ## Start here
 
@@ -24,7 +24,7 @@ Clean results go to clean storage, malicious results to malicious storage, and u
 
 New destination filenames use `original-name_<job-id>.ext`, e.g. `report_<job-id>.zip`. Files retain their original bytes and format: the app does not create ZIP archives or add archive passwords. Existing archive passwords belong to the uploader and cannot be recovered by the app. Earlier transfers retain their previous destination paths.
 
-The Overview, File activity and Audit log pages offer browser-persisted auto-refresh settings. Overview shows Scanning now plus rolling minute/hour/day/30-day counts. CSV export includes the entire job history; the activity view offers filtered, paginated history. See [console usage](docs/console.md) and [pending work](to-do.md).
+The Overview, File activity and Audit log pages offer browser-persisted auto-refresh settings. Overview shows Pending scans, Scanning now and rolling minute/hour/day/30-day counts. CSV export includes the entire job history; the activity view offers filtered, paginated history. See [console usage](docs/console.md) and [pending work](to-do.md).
 
 ## Run directly
 
@@ -69,7 +69,7 @@ Run browser checks against an isolated instance with `PLAYWRIGHT_BROWSERS_PATH=/
 
 ## Container availability
 
-The image runs a separate Go watchdog around the API/scheduler/worker process. Stalls, exits and database liveness failures trigger child restart; Docker handles container exit and host boot via `restart: unless-stopped`. `/livez` checks component progress, while external storage/scanner failures use normal processing retries. Share inputs are atomically claimed before scanning, and claimed ownership survives restart. External notifications remain deferred; customer-scale testing is owned by the customer.
+The image supervises the management API and processing engine independently. SDK calls use isolated child processes for safe parallel scanning. Configure Simultaneous scans in each profile (default 2); the shared engine defaults to 8 worker slots, configurable with V1FS_MAX_WORKERS (1–32). Engine recovery leaves the console available. Docker handles container exit and host boot via `restart: unless-stopped`. `/livez` reports API/database liveness plus engine status; container health requires both services. External storage/scanner failures use normal processing retries. Share inputs are atomically claimed before scanning, and claimed ownership survives restart. External notifications remain deferred; customer-scale testing is owned by the customer.
 
 ### Performance validation
 
