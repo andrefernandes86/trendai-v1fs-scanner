@@ -130,7 +130,7 @@ func ListBlobs(ctx context.Context, m Mount, prefix, marker string) ([]BlobEntry
 		if b.Properties.LastModified != nil {
 			v.Modified = b.Properties.LastModified.UTC().Format("2006-01-02T15:04:05Z")
 		}
-		if val := b.Metadata["v1fs-complete"]; val != nil && *val == "true" {
+		if completeMetadata(b.Metadata) {
 			v.Complete = true
 		}
 		out = append(out, v)
@@ -318,4 +318,13 @@ func (a *App) Scan(ctx context.Context, path string, s Scanner, p Profile) ([]by
 	defer c.Destroy()
 	raw, e := c.ScanFileWithContext(ctx, path, []string{"app:trendai-v1fs", "profile:" + p.ID})
 	return []byte(raw), e
+}
+
+func completeMetadata(m map[string]*string) bool {
+	for _, key := range []string{"v1fs_complete", "v1fs-complete"} {
+		if v := m[key]; v != nil && *v == "true" {
+			return true
+		}
+	}
+	return false
 }

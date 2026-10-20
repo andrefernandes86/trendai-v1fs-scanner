@@ -76,6 +76,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /api/mounts/{id}/blobs", a.blobs)
 	mux.HandleFunc("GET /api/mounts/{id}/files", a.blobs)
 	mux.HandleFunc("GET /api/profiles", a.profiles)
+	mux.HandleFunc("POST /api/profiles/{id}/test-file", a.profileTestFile)
 	mux.HandleFunc("PUT /api/profiles/{id}", a.profileSave)
 	mux.HandleFunc("DELETE /api/profiles/{id}", func(w http.ResponseWriter, r *http.Request) { a.remove(w, r, "profiles") })
 	mux.HandleFunc("GET /api/scanner", a.scannerGet)

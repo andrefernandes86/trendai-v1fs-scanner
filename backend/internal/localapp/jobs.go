@@ -87,7 +87,7 @@ func (a *App) enqueueExpected(ctx context.Context, id, key, expected string) (st
 			s.Version = *props.VersionID
 		}
 		if s.Profile.RequireMarker {
-			if p := props.Metadata["v1fs-complete"]; p == nil || *p != "true" {
+			if !completeMetadata(props.Metadata) {
 				return "", errors.New("profile requires v1fs-complete=true metadata on completed uploads")
 			}
 		}
@@ -276,7 +276,9 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		fail("Destination copy or SHA-256 verification failed. Original file preserved.")
 		return
 	}
-	_ = a.transition(id, state, verdict, digest, dest.BaseURL()+"/"+fullKey, "", 0)
+	if e = a.transition(id, state, verdict, digest, dest.BaseURL()+"/"+fullKey, "", 0); e == nil {
+		a.cleanupTestFile(ctx, s, digest)
+	}
 }
 func (a *App) monitor(ctx context.Context) {
 	ticker := time.NewTicker(time.Second)
