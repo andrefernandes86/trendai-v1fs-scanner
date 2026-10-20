@@ -50,6 +50,7 @@ func run() error {
 	out := flag.String("out", "", "Private work directory")
 	profile := flag.String("profile", "", "Enabled source profile ID")
 	count := flag.Int("count", 1000, "Uploads per scenario")
+	checkPrefix := flag.String("check-prefix", "", "Read-only source listing for a completed test prefix; no uploads")
 	waitPrefix := flag.String("wait-prefix", "", "Wait for an earlier 1000-file scenario to drain before uploading")
 	archives := flag.Bool("archives", false, "Supplementary real ZIP archive test using each verified sample")
 	scenarioOnly := flag.String("scenario", "", "Run only burst or paced (default both)")
@@ -113,6 +114,28 @@ func run() error {
 	client, e := source.ContainerClient()
 	if e != nil {
 		return e
+	}
+	if *checkPrefix != "" {
+		marker := ""
+		remaining := 0
+		for {
+			entries, next, err := localapp.ListBlobs(context.Background(), source, strings.TrimPrefix(*checkPrefix, source.Prefix), marker)
+			if err != nil {
+				return err
+			}
+			remaining += len(entries)
+			if next == "" {
+				break
+			}
+			marker = next
+		}
+		report := map[string]any{"prefix": *checkPrefix, "remainingSourceFiles": remaining, "checkedAt": time.Now().UTC()}
+		payload, _ := json.MarshalIndent(report, "", "  ")
+		if err := os.WriteFile(filepath.Join(*out, "source-check.json"), payload, 0600); err != nil {
+			return err
+		}
+		fmt.Println(string(payload))
+		return nil
 	}
 	rows, e := db.Query("SELECT key,verdict,digest,destination,snapshot FROM jobs WHERE state IN ('COMPLETED','QUARANTINED') AND verdict IN ('CLEAN','MALICIOUS') AND updated_at>=? ORDER BY updated_at DESC", time.Now().Add(-24*time.Hour).Format(time.RFC3339Nano))
 	if e != nil {

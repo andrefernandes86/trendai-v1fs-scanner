@@ -9,7 +9,7 @@ p=argparse.ArgumentParser();p.add_argument('--data',required=True);p.add_argumen
 data,run,out=map(Path,[args.data,args.run,args.out]);out.mkdir(parents=True,exist_ok=True)
 c=sqlite3.connect(f'file:{data}/scanner.db?mode=ro',uri=True);c.row_factory=sqlite3.Row
 a=AESGCM((data/'master.key').read_bytes())
-def instant(v): return datetime.fromisoformat(re.sub(r'(\.\d{6})\d+',r'\1',v).replace('Z','+00:00')).timestamp() if v else None
+def instant(v): return datetime.fromisoformat(re.sub(r'\.(\d+)',lambda m:'.'+m[1][:6].ljust(6,'0'),v).replace('Z','+00:00')).timestamp() if v else None
 def delta(a,b): return round(instant(b)-instant(a),6) if a and b else None
 def stats(values):
  v=sorted(x for x in values if x is not None)
