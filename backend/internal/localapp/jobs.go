@@ -249,6 +249,10 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 			return
 		}
 		verdict = core.Normalize(raw)
+		if _, e := a.DB.Exec("INSERT INTO scan_results(job_id,scanned_at,verdict) VALUES(?,?,?) ON CONFLICT(job_id) DO NOTHING", id, stamp(), verdict); e != nil {
+			fail("Could not record scan result.")
+			return
+		}
 		if verdict != "CLEAN" && verdict != "MALICIOUS" {
 			a.routeScanFailure(ctx, id, s, path, digest, "Scanner returned an unverified result. Manual review required.")
 			return
