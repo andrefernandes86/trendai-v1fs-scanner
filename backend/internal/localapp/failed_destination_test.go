@@ -29,7 +29,7 @@ func TestUnknownVerdictRoutesOnlyToFailedDestination(t *testing.T) {
 	digest := hex.EncodeToString(sum[:])
 	s := Snapshot{Failed: Mount{ID: "failed", Kind: "smb", Server: "nas", Share: "failed"}, Profile: Profile{FailedPrefix: "review"}, Key: "input.txt", Size: int64(len(content))}
 	a.routeScanFailure(context.Background(), "job", s, local, digest, "Unknown verdict")
-	got, e := os.ReadFile(fs.p("review/job/input.txt"))
+	got, e := os.ReadFile(fs.p("review/input_job.txt"))
 	if e != nil || string(got) != string(content) {
 		t.Fatalf("copy %q %v", got, e)
 	}

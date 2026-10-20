@@ -3,6 +3,7 @@ package localapp
 import (
 	"context"
 	"errors"
+	"path"
 	"strings"
 
 	"github.com/andrefernandes86/trendai-v1fs-scanner/internal/core"
@@ -37,7 +38,10 @@ func routeResult(ctx context.Context, id string, s Snapshot, local, digest, verd
 		tags = map[string]string{"scanned": "false", "verdict": "scan_failed"}
 	}
 	parts := []string{}
-	for _, p := range []string{target.Prefix, prefix, id, s.Key} {
+	name := path.Base(s.Key)
+	ext := path.Ext(name)
+	name = strings.TrimSuffix(name, ext) + "_" + id + ext
+	for _, p := range []string{target.Prefix, prefix, name} {
 		if p = strings.Trim(p, "/"); p != "" {
 			parts = append(parts, p)
 		}

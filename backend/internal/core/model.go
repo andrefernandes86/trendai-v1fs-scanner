@@ -172,9 +172,22 @@ func Normalize(b []byte) string {
 			return "UNKNOWN"
 		}
 		for k := range engines {
-			if k != "atse" {
+			if k != "atse" && k != "trendx" {
 				return "UNKNOWN"
 			}
+		}
+	}
+	// Every reported supported engine must complete without errors before clean promotion.
+	for _, raw := range engines {
+		var engine struct {
+			MalwareCount *int            `json:"malwareCount"`
+			Error        json.RawMessage `json:"error"`
+		}
+		if json.Unmarshal(raw, &engine) != nil || engine.MalwareCount == nil || *engine.MalwareCount < 0 || (len(engine.Error) > 0 && string(engine.Error) != "null") {
+			return "UNKNOWN"
+		}
+		if *engine.MalwareCount > 0 {
+			return "MALICIOUS"
 		}
 	}
 	var r struct {

@@ -58,3 +58,15 @@ func TestIdentityAndPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestVerboseMultipleEngines(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		{`{"scanId":"x","result":{"atse":{"malwareCount":0,"error":null},"trendx":{"malwareCount":0,"error":null}}}`, "CLEAN"},
+		{`{"scanId":"x","result":{"atse":{"malwareCount":0,"error":null},"trendx":{"malwareCount":1,"error":null}}}`, "MALICIOUS"},
+		{`{"scanId":"x","result":{"atse":{"malwareCount":0,"error":null},"trendx":{"malwareCount":0,"error":{"code":500}}}}`, "UNKNOWN"},
+	} {
+		if got := Normalize([]byte(tc.raw)); got != tc.want {
+			t.Fatalf("%s want %s", got, tc.want)
+		}
+	}
+}
