@@ -278,3 +278,5 @@ The **Files submitted**, **Clean promotions**, **Quarantined files** and **Scan 
 Open **Audit log** to see saved configuration changes, processing decisions and operator actions. Use auto-refresh or Refresh for the latest entries, and Export JSON to keep a copy.
 
 ![Audit log with demonstration configuration events](images/audit-log.png)
+
+Archive settings: **Maximum archive entries** defaults to **10** and accepts **10–100**. The count is shared across all archive layers, including directories and nested archive members.

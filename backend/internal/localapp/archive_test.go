@@ -48,7 +48,7 @@ func TestArchiveDepthTwentyAndTwentyOne(t *testing.T) {
 			data = zipFixture(t, "leaf.txt", []byte("benign"))
 		}
 		if n >= 20 {
-			m := unpackFixture(t, data, "outer.zip", ArchiveOptions{MaxDepth: 20})
+			m := unpackFixture(t, data, "outer.zip", ArchiveOptions{MaxDepth: 20, MaxFiles: 100})
 			if n == 20 && !m.Complete {
 				t.Fatal(m.Error)
 			}
@@ -265,5 +265,16 @@ func TestArchiveRoutesOriginalAndBlockedNeverCountsAsScanned(t *testing.T) {
 				t.Fatal("bulk summary includes full SDK evidence", e)
 			}
 		})
+	}
+}
+
+func TestArchiveEntrySettings(t *testing.T) {
+	if got := (ArchiveOptions{}).Defaults().MaxFiles; got != 10 {
+		t.Fatalf("default entries = %d", got)
+	}
+	for _, n := range []int{10, 100} {
+		if err := (ArchiveOptions{MaxFiles: n}).Validate(); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

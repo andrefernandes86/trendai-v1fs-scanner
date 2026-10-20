@@ -9,7 +9,7 @@ Supported extraction formats are ZIP/ZIP64 (stored/deflate methods), TAR and GZI
 | Setting | Default | Allowed range and purpose |
 |---|---|---|
 | Maximum archive layers | 5 | 1–20. Outer archive is layer 1; TAR.GZ consumes two layers. At 20 layers a regular leaf is permitted, but another archive at layer 21 is refused. |
-| Maximum archive entries | 1,000 | 1–10,000 shared across the full tree. Counts directories and intermediate container members too. |
+| Maximum archive entries | 10 | 10–100 shared across the full tree. Counts directories and intermediate container members too. |
 | Maximum total expanded size | 10 GB | Up to 100 GB decimal. Counts actual extracted bytes, including intermediate nested archives; budgets never reset at a new layer. |
 | Maximum extracted member size | 2 GB | At most the total expanded-size budget. Increase for legitimate larger members only after sizing disk and scan time. |
 | Maximum expansion ratio | 100 | 1–10,000. Cumulative extracted bytes versus original compressed file size; also checks ZIP member size ratios. |
@@ -64,3 +64,5 @@ Reserve disk for the original capture **plus the configured total expansion budg
 Use a dedicated source/profile with small limits. Test a safe ZIP, EICAR inside ZIP, nested safe/malicious content, valid 20-layer nesting, rejected 21-layer nesting, highly compressible data above a low ratio limit, excessive entries, unsafe paths, links, corrupt/encrypted content and an extraction timeout. Verify that failed/breached cases never arrive as clean, the original archive remains byte-for-byte intact at its verified destination, and temporary workspaces are removed.
 
 References: [Go ZIP format support and ZIP64 fields](https://pkg.go.dev/archive/zip) and [Linux Landlock confinement](https://docs.kernel.org/userspace-api/landlock.html). Engine format and inspection limits remain separate from this application's extraction limits.
+
+**Maximum size per extracted file (GB)** limits each individual unpacked file, rather than the original compressed archive. For example, 2 GB permits each extracted file to be up to 2 GB; all extracted content must also fit the shared total expanded-size budget. A file exceeding either budget makes inspection incomplete and follows scan-failed handling.

@@ -18,7 +18,7 @@ func (o ArchiveOptions) Defaults() ArchiveOptions {
 		o.MaxDepth = 5
 	}
 	if o.MaxFiles == 0 {
-		o.MaxFiles = 1000
+		o.MaxFiles = 10
 	}
 	if o.MaxBytes == 0 {
 		o.MaxBytes = 10_000_000_000
