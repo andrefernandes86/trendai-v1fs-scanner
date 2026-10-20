@@ -325,23 +325,23 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	for _, s := range []string{p.Prefix, p.GoodPrefix, p.BadPrefix} {
+	for _, s := range []string{p.Prefix, p.GoodPrefix, p.BadPrefix, p.FailedPrefix} {
 		if s != "" && !core.ValidKey(s) {
 			problem(w, 400, "Invalid path prefix.")
 			return
 		}
 	}
-	var mounts [3]Mount
-	for i, id := range []string{p.SourceMount, p.GoodMount, p.BadMount} {
+	var mounts [4]Mount
+	for i, id := range []string{p.SourceMount, p.GoodMount, p.BadMount, p.FailedMount} {
 		if a.Get("mounts", id, &mounts[i]) != nil {
-			problem(w, 400, "Select existing source, clean, and malicious storage connections.")
+			problem(w, 400, "Select existing source, clean, malicious, and scan failed storage connections.")
 			return
 		}
 	}
-	for i := 0; i < 3; i++ {
-		for j := i + 1; j < 3; j++ {
+	for i := 0; i < 4; i++ {
+		for j := i + 1; j < 4; j++ {
 			if sameStorageRoot(mounts[i], mounts[j]) {
-				problem(w, 400, "Source, clean, and malicious destinations must use distinct containers or shares.")
+				problem(w, 400, "Source, clean, malicious, and scan failed destinations must use distinct containers or shares.")
 				return
 			}
 		}

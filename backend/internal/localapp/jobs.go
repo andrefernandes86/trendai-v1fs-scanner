@@ -27,6 +27,11 @@ func (a *App) ProfileSnapshot(id, key string) (Snapshot, error) {
 	if e := a.Get("mounts", s.Profile.BadMount, &s.Bad); e != nil {
 		return s, e
 	}
+	if s.Profile.FailedMount != "" {
+		if e := a.Get("mounts", s.Profile.FailedMount, &s.Failed); e != nil {
+			return s, e
+		}
+	}
 	if e := a.Get("scanner", "default", &s.Scanner); e != nil {
 		return s, errors.New("configure Vision One first")
 	}
@@ -236,12 +241,16 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 	} else {
 		raw, scanErr := a.Scan(ctx, path, s.Scanner, s.Profile)
 		if scanErr != nil {
-			fail("Scanner request failed. Check the API key, cloud region or local address, TLS, and connectivity.")
+			if attempt >= 5 {
+				a.routeScanFailure(ctx, id, s, path, digest, "Scanner failed after retries. Manual review required.")
+			} else {
+				fail("Scanner request failed. Check the API key, cloud region or local address, TLS, and connectivity.")
+			}
 			return
 		}
 		verdict = core.Normalize(raw)
 		if verdict != "CLEAN" && verdict != "MALICIOUS" {
-			_ = a.transition(id, "HELD", "UNKNOWN", digest, "", "Scanner returned an unverified result. Manual review required.", 0)
+			a.routeScanFailure(ctx, id, s, path, digest, "Scanner returned an unverified result. Manual review required.")
 			return
 		}
 		verifiedDigest = digest
@@ -343,4 +352,26 @@ func (a *App) monitor(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// Unverified bytes are isolated in the failed destination, never in the clean destination.
+func (a *App) routeScanFailure(ctx context.Context, id string, s Snapshot, local, digest, reason string) {
+	if s.Failed.ID == "" {
+		_ = a.transition(id, "HELD", "UNKNOWN", digest, "", reason+" Configure a scan failed destination for new jobs.", 0)
+		return
+	}
+	key := strings.Trim(s.Failed.Prefix+s.Profile.FailedPrefix, "/")
+	if key != "" {
+		key += "/"
+	}
+	key += id + "/" + s.Key
+	if !core.ValidKey(key) {
+		_ = a.transition(id, "HELD", "UNKNOWN", digest, "", reason+" Invalid failed destination path.", 0)
+		return
+	}
+	if err := Route(ctx, s.Failed, key, local, digest, id, "UNKNOWN", s.Size, map[string]string{"scanned": "false", "verdict": "scan_failed"}); err != nil {
+		_ = a.transition(id, "HELD", "UNKNOWN", digest, "", reason+" Failed destination transfer failed; original preserved.", 0)
+		return
+	}
+	_ = a.transition(id, "HELD", "UNKNOWN", digest, s.Failed.BaseURL()+"/"+key, reason, 0)
 }

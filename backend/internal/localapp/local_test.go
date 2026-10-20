@@ -326,7 +326,7 @@ func TestScannerEndpointChangeDoesNotReuseKey(t *testing.T) {
 
 func TestMultipleProfileDestinationsAndContainerIsolation(t *testing.T) {
 	a := testApp(t)
-	for _, m := range []Mount{testMount("incoming", "incoming"), testMount("good", "clean"), testMount("bad", "quarantine"), testMount("alias", "incoming")} {
+	for _, m := range []Mount{testMount("incoming", "incoming"), testMount("good", "clean"), testMount("bad", "quarantine"), testMount("alias", "incoming"), testMount("failed", "scan-failed")} {
 		if e := a.Save("mounts", m.ID, m); e != nil {
 			t.Fatal(e)
 		}
@@ -335,7 +335,7 @@ func TestMultipleProfileDestinationsAndContainerIsolation(t *testing.T) {
 		t.Fatal(e)
 	}
 	for i := 0; i < 2; i++ {
-		p := Profile{ID: fmt.Sprintf("policy%d", i), Name: "Profile", SourceMount: "incoming", GoodMount: "good", BadMount: "bad", GoodPrefix: fmt.Sprintf("approved/%d", i), BadPrefix: fmt.Sprintf("blocked/%d", i)}
+		p := Profile{ID: fmt.Sprintf("policy%d", i), Name: "Profile", SourceMount: "incoming", GoodMount: "good", BadMount: "bad", FailedMount: "failed", GoodPrefix: fmt.Sprintf("approved/%d", i), BadPrefix: fmt.Sprintf("blocked/%d", i)}
 		body, _ := json.Marshal(p)
 		r := httptest.NewRequest("PUT", "http://localhost/api/profiles/"+p.ID, bytes.NewReader(body))
 		r.SetPathValue("id", p.ID)
@@ -345,7 +345,7 @@ func TestMultipleProfileDestinationsAndContainerIsolation(t *testing.T) {
 			t.Fatal(w.Body.String())
 		}
 	}
-	p := Profile{ID: "unsafe", Name: "Unsafe", SourceMount: "incoming", GoodMount: "alias", BadMount: "bad"}
+	p := Profile{ID: "unsafe", Name: "Unsafe", SourceMount: "incoming", GoodMount: "alias", BadMount: "bad", FailedMount: "failed"}
 	body, _ := json.Marshal(p)
 	r := httptest.NewRequest("PUT", "http://localhost/api/profiles/unsafe", bytes.NewReader(body))
 	r.SetPathValue("id", "unsafe")

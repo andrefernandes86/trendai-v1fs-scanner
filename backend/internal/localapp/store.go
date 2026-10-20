@@ -56,6 +56,8 @@ type Scanner struct {
 	TLS      bool   `json:"tls"`
 }
 type Profile struct {
+	FailedMount         string `json:"failedMount"`
+	FailedPrefix        string `json:"failedPrefix"`
 	ScanIntervalSeconds int    `json:"scanIntervalSeconds"`
 	ScannedTags         string `json:"scannedTags"`
 	CleanTags           string `json:"cleanTags"`
@@ -80,6 +82,7 @@ type Profile struct {
 type Snapshot struct {
 	Source             Mount   `json:"source"`
 	Good               Mount   `json:"good"`
+	Failed             Mount   `json:"failed"`
 	Bad                Mount   `json:"bad"`
 	Scanner            Scanner `json:"scanner"`
 	Profile            Profile `json:"profile"`
