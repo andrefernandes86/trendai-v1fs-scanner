@@ -44,3 +44,11 @@ go vet ./...
 Tests cover secret encryption/redaction, authentication/session invalidation, cross-origin rejection, settings persistence, single-instance locking, concurrent duplicate submission, storage routing, source replacement, and replay without duplicate destination writes. Storage and scanner fixtures are simulated; they do not claim real Azure or Vision One throughput or credential validation. Production scanning uses real SDKs and no simulator is exposed in the console.
 
 See [architecture](docs/architecture.md) and [operations](docs/operations.md).
+
+## Product architecture and deployment guide
+
+The product comprises a React console, a Go API/scheduler, a durable SQLite job queue, direct storage connectors and the official Vision One scanning SDK. Profiles discover only their source, capture stable file versions, scan them, route by verdict, verify destination size/SHA-256, then attempt removal of the unchanged source. Unknown results remain isolated for review. See [architecture](docs/architecture.md) for components, state and trust boundaries, [console usage](docs/console.md) for setup and operation, and [operations](docs/operations.md#deploy-on-the-current-host) for exact deployment paths and commands for the current host.
+
+## Planned reliability and exclusion features
+
+The [backlog](to-do.md) now includes inventory reconciliation, independent scan/transfer/delete retries, failed-file recovery, monitoring alerts and crash-safe move reconciliation. It also specifies **exclusion rules** that would send matching files to clean storage as **EXCLUDED / NOT SCANNED**, plus stronger **verified-copy then conditional-delete** handling with supplemental CRC32C and SHA-256. These are planned enhancements, not existing settings. CRC does not replace SHA-256 or prove upload completion. Do not promise that no file can be missed until reconciliation, recovery and fault tests are implemented and validated.

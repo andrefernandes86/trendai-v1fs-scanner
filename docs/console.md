@@ -18,3 +18,9 @@ Overview, File activity and Audit log offer Off/5s/10s/30s/1m/5m auto-refresh. S
 ## Detection details and older uploads
 
 New scans retain an encrypted scanner response. Record details show malware names, detection engines and affected files, with an authenticated Show scanner response action. CSV includes malware names and engines. Old records explicitly say names were not recorded; do not infer a malware name from a filename. Earlier uploads show when a newer version of the same source filename completed, keeping historical failures distinct from the current result.
+
+## Planned exclusion and verification settings
+
+Exclusion controls are backlog items, not current console options. The proposed workflow is to define per-profile path/filename rules, preview matches, then save a versioned policy. A match would promote to clean storage with an EXCLUDED / NOT SCANNED label, not a clean scan verdict. The transfer would still require content verification before source deletion. Broad rules can bypass malware detection and must be visible in activity/export.
+
+The proposed move-verification controls will show source/destination size, SHA-256, CRC32C and source-delete state. At present, routing already verifies size and SHA-256; supplemental CRC32C and durable independent deletion recovery remain pending.
