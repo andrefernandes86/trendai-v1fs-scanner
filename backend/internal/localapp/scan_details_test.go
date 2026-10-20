@@ -38,3 +38,37 @@ func TestScanDetectionDetails(t *testing.T) {
 		t.Fatal("unprotected response")
 	}
 }
+
+func TestFailureRoutingTags(t *testing.T) {
+	a := testApp(t)
+	for _, verdict := range []string{"CLEAN", "MALICIOUS", "UNKNOWN", "EXCLUDED", "OVERSIZED"} {
+		tags, err := a.jobRoutingTags("absent", Profile{}, verdict)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if verdict == "UNKNOWN" && (tags["scan-failed"] != "true" || tags["scanned"] != "false") {
+			t.Fatal(tags)
+		}
+		if (verdict == "CLEAN" || verdict == "MALICIOUS") && tags["scan-failed"] != "false" {
+			t.Fatal(tags)
+		}
+		if (verdict == "EXCLUDED" || verdict == "OVERSIZED") && tags["scan-failed"] == "true" {
+			t.Fatal("policy bypass is not a scan failure", tags)
+		}
+	}
+	if err := a.recordScanDetails("incomplete", []byte(`{"archiveInspection":{"complete":false,"extractionComplete":true,"error":"member timeout"}}`), ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, verdict := range []string{"UNKNOWN", "MALICIOUS"} {
+		tags, err := a.jobRoutingTags("incomplete", Profile{}, verdict)
+		if err != nil || tags["scan-failed"] != "true" || tags["scanned"] != "false" {
+			t.Fatal(tags, err)
+		}
+		if verdict == "MALICIOUS" && tags["verdict"] != "malicious" {
+			t.Fatal(tags)
+		}
+	}
+	if _, err := (Profile{CleanTags: "scan-failed=true"}).ResultTags("CLEAN"); err == nil {
+		t.Fatal("accepted misleading failure tag")
+	}
+}

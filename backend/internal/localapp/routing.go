@@ -2,6 +2,7 @@ package localapp
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path"
 	"strings"
@@ -11,7 +12,7 @@ import (
 
 // routeResult publishes the exact downloaded/scanned bytes and verifies the destination.
 // The source is never used as a destination, and no result defaults to clean.
-func routeResult(ctx context.Context, id string, s Snapshot, local, digest, verdict string) (destination, state string, err error) {
+func routeResult(ctx context.Context, id string, s Snapshot, local, digest, verdict string, resultTags ...map[string]string) (destination, state string, err error) {
 	var target Mount
 	var prefix string
 	var tags map[string]string
@@ -32,6 +33,9 @@ func routeResult(ctx context.Context, id string, s Snapshot, local, digest, verd
 	tags, err = routingTags(s.Profile, verdict)
 	if err != nil {
 		return "", "", err
+	}
+	if len(resultTags) > 0 {
+		tags = resultTags[0]
 	}
 	parts := []string{}
 	name := path.Base(s.Key)
@@ -65,8 +69,33 @@ func routingTags(p Profile, verdict string) (map[string]string, error) {
 			return nil, err
 		}
 	} else {
-		tags = map[string]string{"scanned": "false", "verdict": "scan_failed"}
+		tags = map[string]string{"scanned": "false", "verdict": "scan_failed", "scan-failed": "true"}
 	}
 
+	return tags, nil
+}
+
+// Include incomplete archive evidence even when a member detected malware.
+func (a *App) jobRoutingTags(id string, p Profile, verdict string) (map[string]string, error) {
+	tags, err := routingTags(p, verdict)
+	if err != nil {
+		return nil, err
+	}
+	var payload []byte
+	err = a.DB.QueryRow("SELECT payload FROM scan_summaries WHERE job_id=?", id).Scan(&payload)
+	if err == sql.ErrNoRows {
+		return tags, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var details ScanDetails
+	if err = a.Unseal(payload, &details); err != nil {
+		return nil, err
+	}
+	if details.ArchiveInspection != nil && !details.ArchiveInspection.Complete {
+		tags["scan-failed"] = "true"
+		tags["scanned"] = "false"
+	}
 	return tags, nil
 }

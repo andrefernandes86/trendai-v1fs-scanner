@@ -14,7 +14,7 @@ func TestProfileIntervalAndResultTags(t *testing.T) {
 	p := Profile{ScannedTags: "scanned=true,scanner=Vision One", CleanTags: "verdict=clean", MaliciousTags: "verdict=malicious"}
 	for _, v := range []string{"CLEAN", "MALICIOUS"} {
 		tags, e := p.ResultTags(v)
-		if e != nil || len(tags) != 3 || tags["scanned"] != "true" {
+		if e != nil || len(tags) != 4 || tags["scanned"] != "true" {
 			t.Fatalf("tags: %v %v", tags, e)
 		}
 		if v == "CLEAN" && tags["verdict"] != "clean" || v == "MALICIOUS" && tags["verdict"] != "malicious" {

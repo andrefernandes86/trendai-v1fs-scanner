@@ -159,7 +159,7 @@ func (a *App) finalizeMove(ctx context.Context, id string, s Snapshot, m MoveRec
 	}
 
 	if m.Target.Type() == "blob" {
-		tags, err := routingTags(s.Profile, m.Verdict)
+		tags, err := a.jobRoutingTags(id, s.Profile, m.Verdict)
 		if err == nil {
 			b, e := m.Target.BlobClient(m.Key, "")
 			err = e
@@ -248,7 +248,12 @@ func (a *App) routeCapturedNow(ctx context.Context, id string, s Snapshot, local
 	}
 	_ = a.transition(id, "ROUTING", verdict, digest, "", reason, 0)
 	uploadStart := time.Now()
-	destination, state, e := routeResult(ctx, id, s, local, digest, verdict)
+	tags, tagErr := a.jobRoutingTags(id, s.Profile, verdict)
+	if tagErr != nil {
+		a.retryStage(id, "transfer", s.Profile, verdict, digest, "", "Could not read scan-result tags; source preserved.")
+		return
+	}
+	destination, state, e := routeResult(ctx, id, s, local, digest, verdict, tags)
 	a.recordTiming(id, "upload", uploadStart)
 	if e != nil {
 		a.retryStage(id, "transfer", s.Profile, verdict, digest, "", "Destination transfer or verification failed; source preserved.")

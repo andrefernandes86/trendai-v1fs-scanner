@@ -280,3 +280,5 @@ Open **Audit log** to see saved configuration changes, processing decisions and 
 ![Audit log with demonstration configuration events](images/audit-log.png)
 
 Archive settings: **Maximum archive entries** defaults to **10** and accepts **10–100**. The count is shared across all archive layers, including directories and nested archive members.
+
+Result tags automatically include `scan-failed=true` and `scanned=false` for incomplete archive inspections or unknown scans routed after exhausted retries. Incomplete archives with detected malware retain their malicious verdict and quarantine routing. Complete clean/malicious scans receive `scan-failed=false`. Azure Blob stores native tags; shares store JSON sidecars. Existing destination objects are not retroactively retagged.

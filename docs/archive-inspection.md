@@ -66,3 +66,5 @@ Use a dedicated source/profile with small limits. Test a safe ZIP, EICAR inside 
 References: [Go ZIP format support and ZIP64 fields](https://pkg.go.dev/archive/zip) and [Linux Landlock confinement](https://docs.kernel.org/userspace-api/landlock.html). Engine format and inspection limits remain separate from this application's extraction limits.
 
 **Maximum size per extracted file (GB)** limits each individual unpacked file, rather than the original compressed archive. For example, 2 GB permits each extracted file to be up to 2 GB; all extracted content must also fit the shared total expanded-size budget. A file exceeding either budget makes inspection incomplete and follows scan-failed handling.
+
+Result tags automatically include `scan-failed=true` and `scanned=false` for incomplete archive inspections or unknown scans routed after exhausted retries. Incomplete archives with detected malware retain their malicious verdict and quarantine routing. Complete clean/malicious scans receive `scan-failed=false`. Azure Blob stores native tags; shares store JSON sidecars. Existing destination objects are not retroactively retagged.

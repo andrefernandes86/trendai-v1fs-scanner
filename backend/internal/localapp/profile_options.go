@@ -44,7 +44,7 @@ func (p Profile) ResultTags(verdict string) (map[string]string, error) {
 			result[k] = v
 		}
 	}
-	for key, expected := range map[string]string{"scanned": "true", "verdict": strings.ToLower(verdict)} {
+	for key, expected := range map[string]string{"scanned": "true", "verdict": strings.ToLower(verdict), "scan-failed": "false"} {
 		if value, ok := result[key]; ok && value != expected {
 			return nil, fmt.Errorf("%s is a reserved result tag; expected %s", key, expected)
 		}
