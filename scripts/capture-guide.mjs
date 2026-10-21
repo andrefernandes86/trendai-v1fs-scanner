@@ -34,5 +34,5 @@ try{
  await page.getByRole('button',{name:'File activity',exact:true}).click();await shot('file-activity.png');await page.getByLabel('Scan issue filter').selectOption('scan_errors');await shot('file-activity-errors.png');
  await page.getByRole('button',{name:'Storage explorer',exact:true}).click();await page.locator('.explorer-toolbar select').selectOption('guide-incoming');await shot('storage-explorer.png');
  await page.getByRole('button',{name:'Audit log',exact:true}).click();await shot('audit-log.png');
- await page.getByRole('button',{name:'Sizing calculator',exact:true}).click();await shot('sizing-calculator.png');
+ await page.getByRole('button',{name:'Sizing calculator',exact:true}).click();await shot('sizing-calculator.png');await page.getByText('Size units and a worked example',{exact:true}).click();await page.locator('.sizing-legend').screenshot({path:new URL('sizing-legend.png',output).pathname});
 }finally{await browser.close()}
