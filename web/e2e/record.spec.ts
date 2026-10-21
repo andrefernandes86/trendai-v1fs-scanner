@@ -17,5 +17,5 @@ test('scanner response toggles separately and record refresh stays open with vis
  failed=true;await drawer.getByRole('button',{name:'Refresh detection details',exact:true}).click();await expect(drawer.getByRole('alert')).toContainText('Saved record temporarily unavailable');
  failed=false;await drawer.getByRole('button',{name:'Refresh detection details',exact:true}).click();await expect(drawer.getByRole('status')).toContainText('Detection details refreshed');await expect(drawer.getByText('EICAR_TEST_FILE',{exact:true})).toBeVisible();await expect(drawer).toBeVisible();expect(posts).toBe(0);
  await drawer.getByRole('button',{name:'Show scanner response',exact:true}).click();await drawer.getByRole('button',{name:'Refresh detection details',exact:true}).click();await expect(drawer.locator('#scanner-response-panel')).toContainText('EICAR_TEST_FILE');
- if(test.info().project.name==='desktop')await drawer.screenshot({path:'docs/images/record-details.png'});
+ if(test.info().project.name==='desktop')await drawer.screenshot({path:'../docs/images/record-details.png'});
 });

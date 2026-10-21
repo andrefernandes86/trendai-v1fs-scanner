@@ -4,6 +4,8 @@ This guide takes you from an empty console to your first automatically scanned f
 
 **On this host, open [the console](http://scanner-host:8095).** To install the product on another host, follow [deployment instructions](operations.md#container-first-host-deployment).
 
+Screenshots refreshed on 21 October 2026, including the one-policy-per-container sizing view (maximum 32 simultaneous scans).
+
 Screenshots below show the real console with demonstration settings. `examplestorage` and the example containers are placeholders, not working storage. The example profile is paused so the screenshots do not trigger scans.
 
 ## Before you start
