@@ -252,7 +252,7 @@ func (a *App) claim() (string, Snapshot, int, error) {
 	var id string
 	var b []byte
 	var attempts int
-	e = tx.QueryRow("SELECT j.id,j.snapshot,j.attempts FROM jobs j WHERE j.state IN ('QUEUED','RETRY_PENDING') AND j.available_at<=? AND NOT EXISTS(SELECT 1 FROM transfer_queue tq WHERE tq.job_id=j.id) AND (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.state='SCANNING') < "+limits+" AND (j.size < 1000000000 OR (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.size>=1000000000 AND active.state='SCANNING') < "+largeLimits+") ORDER BY j.created_at,j.id LIMIT 1", parameters...).Scan(&id, &b, &attempts)
+	e = tx.QueryRow("SELECT j.id,j.snapshot,j.attempts FROM jobs j WHERE j.state IN ('QUEUED','RETRY_PENDING') AND j.available_at<=? AND NOT EXISTS(SELECT 1 FROM transfer_queue tq WHERE tq.job_id=j.id) AND (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.state='SCANNING') < "+limits+" AND (j.size < 1000000000 OR (SELECT count(*) FROM jobs active WHERE active.profile_id=j.profile_id AND active.size>=1000000000 AND active.state='SCANNING') < "+largeLimits+") ORDER BY j.available_at,j.created_at,j.id LIMIT 1", parameters...).Scan(&id, &b, &attempts)
 	if e != nil {
 		return "", s, 0, e
 	}
@@ -364,7 +364,7 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 	local, digest, captureCRC, e := DownloadChecksums(ctx, s, captureDir)
 	a.recordTiming(id, "download", downloadStart)
 	if e != nil {
-		a.retryStage(id, "download", s.Profile, verdict, verifiedDigest, "", "Source download failed, identity changed or source is unavailable.")
+		a.retryStage(id, "download", s.Profile, verdict, verifiedDigest, "", "Source download failed, identity changed or source is unavailable. Details: "+redactString(redactString(e.Error(), s.Source.Secret), sasSignature(s.Source.Secret)))
 		return
 	}
 	s.CaptureSHA, s.CaptureCRC = digest, captureCRC
@@ -375,7 +375,7 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 			os.Remove(local)
 		}
 	}()
-	if verifiedDigest != "" && verifiedDigest != digest {
+	if (verifiedDigest != "" && verifiedDigest != digest) || (s.ExpectedDigest != "" && s.ExpectedDigest != digest) {
 		_ = a.transition(id, "HELD", "UNKNOWN", digest, "", "Source differs from previously captured bytes.", 0)
 		return
 	}
@@ -410,7 +410,22 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		return
 	}
 	scanStart := time.Now()
-	raw, scanErr := a.scanWithArchives(ctx, local, s.Key, s.Scanner, s.Profile, digest)
+	var prior *ArchiveEvidence
+	if s.Profile.Archive.Enabled {
+		var payload []byte
+		if a.DB.QueryRow("SELECT payload FROM scan_details WHERE job_id=?", id).Scan(&payload) == nil {
+			var details ScanDetails
+			if a.Unseal(payload, &details) == nil {
+				var envelope struct {
+					Archive *ArchiveEvidence `json:"archiveInspection"`
+				}
+				if json.Unmarshal(details.Response, &envelope) == nil {
+					prior = envelope.Archive
+				}
+			}
+		}
+	}
+	raw, scanErr := a.scanWithArchives(ctx, local, s.Key, s.Scanner, s.Profile, digest, prior)
 	a.recordTiming(id, "scan", scanStart)
 	if errors.Is(scanErr, errArchiveCapacity) {
 		_ = a.transition(id, "RETRY_PENDING", "UNKNOWN", digest, "", scanErr.Error(), time.Minute)
@@ -600,6 +615,10 @@ func (a *App) monitorProfile(ctx context.Context, p Profile) {
 			break
 		}
 		marker = next
+	}
+	if ctx.Err() != nil {
+		failures++
+		summary["message"] = "Source check interrupted or timed out before completing; remaining files will be revisited."
 	}
 	summary["listed"], summary["queued"], summary["waitingForMarker"], summary["waitingForStability"], summary["errors"] = listed, queued, missing, waiting, failures
 	if _, ok := summary["message"]; !ok {

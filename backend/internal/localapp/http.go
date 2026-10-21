@@ -61,6 +61,7 @@ func (a *App) Handler() http.Handler {
 	})
 	mux.HandleFunc("POST /api/setup", a.setup)
 	mux.HandleFunc("POST /api/login", a.login)
+	mux.HandleFunc("POST /api/account/password", a.changePassword)
 	mux.HandleFunc("POST /api/logout", func(w http.ResponseWriter, r *http.Request) {
 		if c, e := r.Cookie("v1fs_session"); e == nil {
 			_, _ = a.DB.Exec("DELETE FROM sessions WHERE token=?", hashToken(c.Value))

@@ -25,29 +25,25 @@ var archiveAdmissions struct {
 }
 
 func archivePermit(ctx context.Context, profile string, limit int) (func(), error) {
-	for {
-		archiveAdmissions.Lock()
-		if archiveAdmissions.profiles == nil {
-			archiveAdmissions.profiles = map[string]int{}
-		}
-		if archiveAdmissions.total < 2 && archiveAdmissions.profiles[profile] < limit {
-			archiveAdmissions.total++
-			archiveAdmissions.profiles[profile]++
-			archiveAdmissions.Unlock()
-			return func() {
-				archiveAdmissions.Lock()
-				archiveAdmissions.total--
-				archiveAdmissions.profiles[profile]--
-				archiveAdmissions.Unlock()
-			}, nil
-		}
-		archiveAdmissions.Unlock()
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(100 * time.Millisecond):
-		}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
+	archiveAdmissions.Lock()
+	defer archiveAdmissions.Unlock()
+	if archiveAdmissions.profiles == nil {
+		archiveAdmissions.profiles = map[string]int{}
+	}
+	if archiveAdmissions.total >= 2 || archiveAdmissions.profiles[profile] >= limit {
+		return nil, errArchiveCapacity
+	}
+	archiveAdmissions.total++
+	archiveAdmissions.profiles[profile]++
+	return func() {
+		archiveAdmissions.Lock()
+		defer archiveAdmissions.Unlock()
+		archiveAdmissions.total--
+		archiveAdmissions.profiles[profile]--
+	}, nil
 }
 
 var extractArchiveProcess = launchArchiveHelper
@@ -101,6 +97,7 @@ func launchArchiveHelperAt(ctx context.Context, r ExtractRequest, executable str
 }
 
 type ArchiveMemberResult struct {
+	Reused   bool            `json:"reused,omitempty"`
 	Name     string          `json:"name"`
 	Depth    int             `json:"depth"`
 	Size     int64           `json:"size"`
@@ -130,7 +127,7 @@ func archiveEnvelope(ev ArchiveEvidence, verdict string, policyBlocked bool, det
 	}
 	scannerCalls := 0
 	for _, m := range ev.Members {
-		if len(m.Response) > 0 {
+		if len(m.Response) > 0 && !m.Reused {
 			scannerCalls++
 		}
 	}
@@ -140,7 +137,7 @@ func archiveEnvelope(ev ArchiveEvidence, verdict string, policyBlocked bool, det
 
 // The original and every extracted regular member (including nested containers)
 // are required scans. Exclusions/size bypass rules never apply to members.
-func (a *App) scanWithArchives(ctx context.Context, local, name string, s Scanner, p Profile, originalDigest string) ([]byte, error) {
+func (a *App) scanWithArchives(ctx context.Context, local, name string, s Scanner, p Profile, originalDigest string, prior ...*ArchiveEvidence) ([]byte, error) {
 	if !p.Archive.Enabled {
 		return a.Scan(ctx, local, s, p)
 	}
@@ -182,6 +179,15 @@ func (a *App) scanWithArchives(ctx context.Context, local, name string, s Scanne
 		return nil, statErr
 	}
 	entries := append([]ArchiveEntry{{Name: name, Path: local, Size: st.Size(), SHA256: originalDigest}}, manifest.Entries...)
+	reusable := map[string]ArchiveMemberResult{}
+	if len(prior) > 0 && prior[0] != nil {
+		for _, member := range prior[0].Members {
+			v := core.Normalize(member.Response)
+			if member.SHA256 != "" && (v == "CLEAN" || v == "MALICIOUS") && member.Verdict == v {
+				reusable[member.Name+"\x00"+member.SHA256] = member
+			}
+		}
+	}
 	verdict := "CLEAN"
 	detections := []Detection{}
 	responseBytes := 0
@@ -200,7 +206,14 @@ func (a *App) scanWithArchives(ctx context.Context, local, name string, s Scanne
 		if entry.Path != local && (filepath.Dir(entry.Path) != workspace || !strings.HasPrefix(filepath.Base(entry.Path), "member-")) {
 			return nil, fmt.Errorf("Invalid extraction manifest path")
 		}
-		raw, scanErr := a.Scan(ctx, entry.Path, s, p)
+		var raw []byte
+		var scanErr error
+		if cached, ok := reusable[entry.Name+"\x00"+entry.SHA256]; ok {
+			raw = cached.Response
+			member.Reused = true
+		} else {
+			raw, scanErr = a.Scan(ctx, entry.Path, s, p)
+		}
 		member.Verdict = core.Normalize(raw)
 		if scanErr != nil {
 			member.Verdict = "UNKNOWN"

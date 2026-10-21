@@ -40,3 +40,7 @@ Transfer handoffs are encrypted in SQLite. After engine restart, incomplete jobs
 ## Remaining tuning work
 
 Customer-scale soak tests, storage-specific benchmarks, parallel source admission and rate/backlog-age charts remain follow-up work. External notifications are deliberately deferred.
+
+Archive admission and retries: when the inspection pool is full, the job defers without holding a general scan worker. Same-job retries reuse confirmed member responses only when name/SHA-256 match and retry unknown members. This is not a cross-file scan cache. Keep archive concurrency within the configured limits and inspect individual member errors when coverage remains incomplete.
+
+Blob downloads and destination verification use bounded resumable reads with ETag matching. A dropped stream resumes at its byte offset when possible rather than discarding the complete transfer so far. The file is still checked against expected size and hashes before source deletion.

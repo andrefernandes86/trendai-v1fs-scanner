@@ -188,7 +188,8 @@ func DownloadChecksums(ctx context.Context, s Snapshot, dir string) (name, diges
 	if e != nil {
 		return "", "", "", e
 	}
-	defer r.Body.Close()
+	reader := r.NewRetryReader(ctx, &blob.RetryReaderOptions{MaxRetries: 3})
+	defer reader.Close()
 	f, e := os.CreateTemp(dir, "scan-*")
 	if e != nil {
 		return "", "", "", e
@@ -201,7 +202,7 @@ func DownloadChecksums(ctx context.Context, s Snapshot, dir string) (name, diges
 	}()
 	h := sha256.New()
 	csum := crc32.New(crc32.MakeTable(crc32.Castagnoli))
-	n, e := io.Copy(io.MultiWriter(f, h, csum), io.LimitReader(r.Body, s.Size+1))
+	n, e := io.Copy(io.MultiWriter(f, h, csum), io.LimitReader(reader, s.Size+1))
 	if e != nil {
 		return "", "", "", e
 	}

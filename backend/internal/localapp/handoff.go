@@ -58,7 +58,7 @@ func (a *App) handoffSource(ctx context.Context, id string, s *Snapshot) error {
 	claim, e := a.loadClaim(id)
 	if e == nil && claim.Phase == "CLAIMED" {
 		s.ClaimedKey, s.ClaimedETag = claim.Key, claim.ETag
-		return nil
+		return a.trackRecoveryLocation(id, *s)
 	}
 	fs, e := remoteOpen(ctx, s.Source)
 	if e != nil {
@@ -155,6 +155,9 @@ func (a *App) handoffSource(ctx context.Context, id string, s *Snapshot) error {
 		return e
 	}
 	s.ClaimedKey, s.ClaimedETag = claim.Key, claim.ETag
+	if e = a.trackRecoveryLocation(id, *s); e != nil {
+		return e
+	}
 	a.Audit("source.claimed", id, "Source handed off into scanner-owned .v1fs-claims namespace; original key remains in history.")
 	return nil
 }
@@ -167,4 +170,10 @@ func reservedSharePath(key string) bool {
 		}
 	}
 	return false
+}
+
+// A failed share recovery must remain addressable after its exclusive source handoff.
+func (a *App) trackRecoveryLocation(id string, s Snapshot) error {
+	_, err := a.DB.Exec("UPDATE jobs SET destination=? WHERE id IN (SELECT parent_id FROM recovery_links WHERE child_id=?) AND state='HELD'", s.Source.BaseURL()+"/"+s.sourceKey(), id)
+	return err
 }

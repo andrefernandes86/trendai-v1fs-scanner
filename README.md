@@ -14,6 +14,8 @@ A host-based Azure Blob, Azure Files, SMB and NFSv3 scanner with a React managem
 
 For a new operator or tester, use the [deployment and testing handoff checklist](docs/handoff.md). See the [publication secret review](docs/security-review.md) before sharing this repository publicly.
 
+Latest maintenance: [code review, fixes and validation](docs/code-review-20261021.md), including administrator password changes, archive scheduling and resumable Blob reads.
+
 ## Console workflow
 
 1. Open the host URL and create the administrator password on first use.

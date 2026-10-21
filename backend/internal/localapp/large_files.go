@@ -54,7 +54,7 @@ func streamChecksums(ctx context.Context, s Snapshot) (string, string, int64, er
 		if e != nil {
 			return "", "", 0, e
 		}
-		r = response.Body
+		r = response.NewRetryReader(ctx, &blob.RetryReaderOptions{MaxRetries: 3})
 	} else {
 		fs, err = remoteOpen(ctx, s.Source)
 		if err != nil {

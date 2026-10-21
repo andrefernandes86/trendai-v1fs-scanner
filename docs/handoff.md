@@ -97,3 +97,5 @@ docker compose ps
 Repeat the safe-file and EICAR checks. Give the next operator the console URL, access procedure, storage ownership, backup location, deployed commit, acceptance results and pending items from [to-do.md](../to-do.md). Transfer any secrets outside the repository through your secure channel.
 
 External notifications remain deferred. Source and destination files are not deleted by history cleanup. Acknowledgement preserves failure evidence and does not certify the file as safe.
+
+Account handover: the next administrator can change the password through **AD → Change password**, using the current password. Previous sessions are invalidated. See the [review findings and regression coverage](code-review-20261021.md) for the latest recovery/scheduling/large-download corrections.

@@ -72,3 +72,5 @@ Watchdog fault tests cover abrupt child termination and a completely stopped/unr
 - [x] Full light sidebar with the official standard logo, alongside the dark inverse logo.
 - [x] Compact/expanded profile cards and accessible outcome-card filtering.
 - [x] Shared scan-error count/filter definition, including hidden unresolved records on explicit drill-down.
+
+- Track and eliminate remaining govulncheck advisory matches in imported/required code that is currently unreachable from application call paths; repeat the advisory scan on each dependency update.

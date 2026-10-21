@@ -113,6 +113,7 @@ type Profile struct {
 	Revision            int64  `json:"revision"`
 }
 type Snapshot struct {
+	ExpectedDigest     string  `json:"expectedDigest,omitempty"`
 	CaptureSHA         string  `json:"captureSHA,omitempty"`
 	CaptureCRC         string  `json:"captureCRC,omitempty"`
 	ClaimedKey         string  `json:"claimedKey,omitempty"`

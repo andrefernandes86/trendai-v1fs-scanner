@@ -16,6 +16,9 @@ func (a *App) recoverJob(ctx context.Context, parent string, enrich bool) (strin
 	if e := a.DB.QueryRow("SELECT snapshot,destination,verdict,state FROM jobs WHERE id=?", parent).Scan(&payload, &destination, &verdict, &state); e != nil {
 		return "", e
 	}
+	if state == "ACKNOWLEDGED" {
+		return "", fmt.Errorf("This file version was acknowledged; scanning is stopped.")
+	}
 	if destination == "" {
 		return "", fmt.Errorf("No verified destination is available; retry the source job instead.")
 	}
@@ -41,6 +44,10 @@ func (a *App) recoverJob(ctx context.Context, parent string, enrich bool) (strin
 	s.Source = source
 	s.Key = key
 	s.Version = ""
+	s.CaptureSHA, s.CaptureCRC, s.ClaimedKey, s.ClaimedETag = "", "", "", ""
+	if e := a.DB.QueryRow("SELECT digest FROM jobs WHERE id=?", parent).Scan(&s.ExpectedDigest); e != nil || s.ExpectedDigest == "" {
+		return "", fmt.Errorf("Recovery requires the original captured digest; historical bytes cannot be verified.")
+	}
 	if source.Type() == "blob" {
 		b, e := source.BlobClient(key, "")
 		if e != nil {
@@ -49,6 +56,9 @@ func (a *App) recoverJob(ctx context.Context, parent string, enrich bool) (strin
 		v, e := b.GetProperties(ctx, nil)
 		if e != nil {
 			return "", e
+		}
+		if v.ETag == nil || v.ContentLength == nil {
+			return "", fmt.Errorf("Isolated file identity is unavailable.")
 		}
 		s.ETag = string(*v.ETag)
 		s.Size = *v.ContentLength
@@ -63,6 +73,11 @@ func (a *App) recoverJob(ctx context.Context, parent string, enrich bool) (strin
 	// Current scanner credentials/policy are explicit for recovery; source identity remains the captured isolated file.
 	var current Profile
 	if a.Get("profiles", s.Profile.ID, &current) == nil {
+		// Recovery keeps the original destination roots and prefixes paired with
+		// their immutable mount snapshots while adopting current scan/retry policy.
+		current.GoodMount, current.GoodPrefix = s.Profile.GoodMount, s.Profile.GoodPrefix
+		current.BadMount, current.BadPrefix = s.Profile.BadMount, s.Profile.BadPrefix
+		current.FailedMount, current.FailedPrefix = s.Profile.FailedMount, s.Profile.FailedPrefix
 		s.Profile = current
 	}
 	if a.Get("scanner", "default", &s.Scanner) != nil {
@@ -101,7 +116,8 @@ func (a *App) recoverJob(ctx context.Context, parent string, enrich bool) (strin
 	}
 	// Keep the source's original name on retry, including compatibility for old paths.
 	s.Profile.Rules = nil
-	s.Profile.IgnorePatterns = "" // recovery always scans; never bypass an unknown file
+	s.Profile.IgnorePatterns = ""     // recovery always scans; never bypass an unknown file
+	s.Profile.OversizeAction = "hold" // Never deliver an unresolved file through an unscanned size bypass.
 	s.Profile.Revision += int64(children+1) * 1000000
 	// If the result remains unknown, retain it in the existing isolated location rather than recopying to the same root.
 

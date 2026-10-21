@@ -117,3 +117,5 @@
 @media(max-width:650px){.profile-stepper{grid-template-columns:repeat(3,minmax(0,1fr));padding-bottom:12px}.profile-stepper button{flex-direction:row;padding:8px 4px;font-size:10px}.profile-wizard>form{padding:0 16px}.profile-wizard>.modal-heading{padding:18px 16px 0}.profile-wizard .form-footer{margin-left:-16px;margin-right:-16px;padding:14px 16px}.profile-review{grid-template-columns:1fr}.outcome-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.profile-wizard .wizard-progress{font-size:10px;margin-left:0}}
 
 .profile-routing-help{margin-top:20px;font-size:11px;color:var(--dark-muted,#63738c)}.profile-routing-help summary{cursor:pointer}.profile-routing-help p{margin-top:12px;font-size:11px;max-width:850px}:root:not([data-theme="dark"]) .security-note small,:root:not([data-theme="dark"]) .workspace small,:root:not([data-theme="dark"]) .account small{color:#64758f}
+
+.job-submitted{white-space:nowrap;font-size:12px;min-width:175px}

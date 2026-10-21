@@ -6,7 +6,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	fileservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/service"
-	smb "github.com/hirochachacha/go-smb2"
+	smb "github.com/cloudsoda/go-smb2"
 	"net"
 	"net/http"
 	"net/url"
@@ -32,7 +32,7 @@ func smbShares(ctx context.Context, m Mount) ([]string, error) {
 		conn.SetDeadline(time.Now().Add(30 * time.Second))
 	}
 	d := smb.Dialer{Negotiator: smb.Negotiator{RequireMessageSigning: true}, Initiator: &smb.NTLMInitiator{User: m.Username, Password: m.Secret, Domain: m.Domain}}
-	session, e := d.DialContext(ctx, &smbDiscoveryConn{Conn: conn, server: m.Server})
+	session, e := d.DialConn(ctx, &smbDiscoveryConn{Conn: conn, server: m.Server}, net.JoinHostPort(m.Server, fmt.Sprint(port)))
 	if e != nil {
 		return nil, e
 	}

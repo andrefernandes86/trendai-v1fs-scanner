@@ -10,7 +10,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/directory"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
-	smb "github.com/hirochachacha/go-smb2"
+	smb "github.com/cloudsoda/go-smb2"
 	"io"
 	"net"
 	"net/url"
@@ -269,7 +269,7 @@ func openSMB(ctx context.Context, m Mount) (remoteFS, error) {
 		conn.SetDeadline(time.Now().Add(30 * time.Second))
 	}
 	d := smb.Dialer{Negotiator: smb.Negotiator{RequireMessageSigning: true}, Initiator: &smb.NTLMInitiator{User: m.Username, Password: m.Secret, Domain: m.Domain}}
-	session, e := d.DialContext(ctx, conn)
+	session, e := d.DialConn(ctx, conn, net.JoinHostPort(m.Server, fmt.Sprint(port)))
 	if e != nil {
 		conn.Close()
 		return nil, e

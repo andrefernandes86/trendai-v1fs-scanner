@@ -298,3 +298,13 @@ In **File activity**, choose **HELD** and click **Acknowledge — stop scanning*
 **Record details:** Show scanner response opens a separate response panel; Hide scanner response closes it. Technical record (JSON) is collapsed separately. Refresh detection details reloads the saved record and an open response without starting a new scan or closing the drawer. Success and error messages appear inside the drawer.
 
 ![Scanner response and refreshed detections](images/record-details.png)
+
+## Change the administrator password
+
+Click **AD** in the top-right corner, enter the current password, choose a new password of 12–72 characters and repeat it in Confirm new password. Click **Change password**. The current browser receives a fresh session; other sessions are signed out. The storage credentials, scan configuration and file history stay intact. This tool currently has one administrator account.
+
+![Change administrator password](images/change-password.png)
+
+Archive retries show `reused: true` for successful member evidence reused within the same job. Reuse requires the same member name and SHA-256; failed/changed members are scanned again. Busy archive inspections wait for admission without occupying every general scan worker.
+
+The first **Submitted** column in File activity and recent dashboard activity shows the job creation timestamp in your browser’s local timezone, including the timezone label. Hover for the original UTC timestamp. This distinguishes uploads sharing a filename; retries retain their original submission time.
