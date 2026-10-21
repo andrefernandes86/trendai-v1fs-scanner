@@ -9,3 +9,5 @@ CRC32C uses Castagnoli and is generated with SHA-256 during source download. Tur
 Validation: full Go race suite passed (localapp 83.194 seconds), including ten admissions/rejection of the eleventh, live changes for already-queued transfers, the exact 1 GB boundary, continued small-file admission while the large limit is full, dynamic ten-worker startup, and 32 overlapping scan calls. All 20 desktop/mobile browser checks passed (1.4 minutes), including profile save at ten and engine reporting ten delivery slots. Production changes are applied only after active file delivery finishes.
 
 ![Ten simultaneous destination transfers](../images/transfer-speed.png)
+
+Live rollout completed after the active 3.5 GB CSV finished delivery. The current profile was set to ten transfers; its large-transfer limit remained one. The production health check passed and engine health reported 32 scan slots, ten transfer slots and ten transfer-worker heartbeats. No active file was interrupted.
