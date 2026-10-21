@@ -216,7 +216,7 @@ func Route(ctx context.Context, m Mount, key, path, digest, job, verdict string,
 }
 func routeBytes(ctx context.Context, m Mount, key, path, digest, job, verdict string, size int64, verifyNow bool, parallel, blockMiB int, tagSets ...map[string]string) error {
 	if m.Type() != "blob" {
-		if err := routeShare(ctx, m, key, path, digest, job, size); err != nil {
+		if err := routeShare(ctx, m, key, path, digest, job, size, !verifyNow); err != nil {
 			return err
 		}
 		if len(tagSets) == 0 || len(tagSets[0]) == 0 {

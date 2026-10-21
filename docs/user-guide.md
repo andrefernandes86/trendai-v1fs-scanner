@@ -308,3 +308,12 @@ Click **AD** in the top-right corner, enter the current password, choose a new p
 Archive retries show `reused: true` for successful member evidence reused within the same job. Reuse requires the same member name and SHA-256; failed/changed members are scanned again. Busy archive inspections wait for admission without occupying every general scan worker.
 
 The first **Submitted** column in File activity and recent dashboard activity shows the job creation timestamp in your browser’s local timezone, including the timezone label. Hover for the original UTC timestamp. This distinguishes uploads sharing a filename; retries retain their original submission time.
+
+### Optional destination content verification
+
+In **Scan profiles → Edit profile → Options → Transfer speed**, use **Verify destination file contents before removing the source**.
+
+- **On (default):** read back the delivered file and compare its size, SHA-256 and CRC32C before removing the source.
+- **Off:** skip the full destination readback. Upload completion, size, destination identity, result tags and source identity checks remain required. This saves a full destination download but does not independently prove identical contents.
+
+This applies to Azure Blob and share destinations. Scanning is unchanged. Existing profiles remain enabled, and queued jobs retain the setting captured when submitted. Record details show the selected verification mode; a skipped readback is never recorded as a successful content verification. Share handoff checks and small tag-sidecar verification remain enabled.

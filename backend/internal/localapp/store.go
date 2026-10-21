@@ -65,15 +65,16 @@ type Scanner struct {
 	TLS      bool   `json:"tls"`
 }
 type Profile struct {
-	UploadConcurrency     int            `json:"uploadConcurrency"`
-	UploadBlockMiB        int            `json:"uploadBlockMiB"`
-	SimultaneousTransfers int            `json:"simultaneousTransfers"`
-	LargeFileTransfers    int            `json:"largeFileTransfers"`
-	Archive               ArchiveOptions `json:"archive"`
-	MaxScanBytes          int64          `json:"maxScanBytes"`
-	OversizeAction        string         `json:"oversizeAction"`
-	LargeFileScans        int            `json:"largeFileScans"`
-	JobTimeoutSeconds     int            `json:"jobTimeoutSeconds"`
+	SkipDestinationVerification bool           `json:"skipDestinationVerification"`
+	UploadConcurrency           int            `json:"uploadConcurrency"`
+	UploadBlockMiB              int            `json:"uploadBlockMiB"`
+	SimultaneousTransfers       int            `json:"simultaneousTransfers"`
+	LargeFileTransfers          int            `json:"largeFileTransfers"`
+	Archive                     ArchiveOptions `json:"archive"`
+	MaxScanBytes                int64          `json:"maxScanBytes"`
+	OversizeAction              string         `json:"oversizeAction"`
+	LargeFileScans              int            `json:"largeFileScans"`
+	JobTimeoutSeconds           int            `json:"jobTimeoutSeconds"`
 
 	Rules                     []FileRule `json:"rules"`
 	IgnorePatterns            string     `json:"ignorePatterns"`

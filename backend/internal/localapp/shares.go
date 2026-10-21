@@ -337,7 +337,7 @@ func verifyRemote(fs remoteFS, key, digest string, size int64) error {
 	}
 	return nil
 }
-func routeShare(ctx context.Context, m Mount, key, local, digest, job string, size int64) error {
+func routeShare(ctx context.Context, m Mount, key, local, digest, job string, size int64, skipVerification ...bool) error {
 	if e := safeKey(key, false); e != nil {
 		return e
 	}
@@ -346,8 +346,21 @@ func routeShare(ctx context.Context, m Mount, key, local, digest, job string, si
 		return e
 	}
 	defer fs.Close()
-	if _, e = fs.Stat(key); e == nil {
+	verify := func(key string) error {
+		if len(skipVerification) > 0 && skipVerification[0] {
+			info, err := fs.Stat(key)
+			if err != nil {
+				return err
+			}
+			if info.Size() != size {
+				return errors.New("destination size changed")
+			}
+			return nil
+		}
 		return verifyRemote(fs, key, digest, size)
+	}
+	if _, e = fs.Stat(key); e == nil {
+		return verify(key)
 	}
 	if e = ensureRemoteDirs(fs, path.Dir(key)); e != nil {
 		return e
@@ -378,7 +391,7 @@ func routeShare(ctx context.Context, m Mount, key, local, digest, job string, si
 		return e
 	}
 	defer fs.Remove(stage)
-	if e = verifyRemote(fs, stage, digest, size); e != nil {
+	if e = verify(stage); e != nil {
 		return e
 	}
 	publishErr := fs.PublishExclusive(stage, key)
@@ -387,7 +400,7 @@ func routeShare(ctx context.Context, m Mount, key, local, digest, job string, si
 			return publishErr
 		}
 	}
-	return verifyRemote(fs, key, digest, size)
+	return verify(key)
 }
 
 func sameStorageRoot(a, b Mount) bool {

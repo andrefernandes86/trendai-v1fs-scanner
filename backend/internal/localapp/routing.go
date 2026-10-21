@@ -50,7 +50,7 @@ func routeResult(ctx context.Context, id string, s Snapshot, local, digest, verd
 	if !core.ValidKey(key) {
 		return "", "", errors.New("invalid destination key")
 	}
-	if err = routeBytes(ctx, target, key, local, digest, id, verdict, s.Size, target.Type() != "blob", defaultInt(s.Profile.UploadConcurrency, 2), defaultInt(s.Profile.UploadBlockMiB, 8), tags); err != nil {
+	if err = routeBytes(ctx, target, key, local, digest, id, verdict, s.Size, target.Type() != "blob" && !s.Profile.SkipDestinationVerification, defaultInt(s.Profile.UploadConcurrency, 2), defaultInt(s.Profile.UploadBlockMiB, 8), tags); err != nil {
 		return "", "", err
 	}
 	return target.BaseURL() + "/" + key, state, nil

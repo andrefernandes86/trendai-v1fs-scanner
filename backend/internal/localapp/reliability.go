@@ -20,20 +20,21 @@ import (
 )
 
 type MoveRecord struct {
-	Phase           string `json:"phase"`
-	Destination     string `json:"destination"`
-	Target          Mount  `json:"target"`
-	Key             string `json:"key"`
-	FinalState      string `json:"finalState"`
-	Verdict         string `json:"verdict"`
-	Digest          string `json:"sha256"`
-	CRC32C          string `json:"crc32c"`
-	Size            int64  `json:"size"`
-	SourceETag      string `json:"sourceETag"`
-	DestinationETag string `json:"destinationETag"`
-	Rule            string `json:"matchedRule,omitempty"`
-	Reason          string `json:"reason,omitempty"`
-	VerifiedAt      string `json:"verifiedAt"`
+	SkipDestinationVerification bool   `json:"skipDestinationVerification"`
+	Phase                       string `json:"phase"`
+	Destination                 string `json:"destination"`
+	Target                      Mount  `json:"target"`
+	Key                         string `json:"key"`
+	FinalState                  string `json:"finalState"`
+	Verdict                     string `json:"verdict"`
+	Digest                      string `json:"sha256"`
+	CRC32C                      string `json:"crc32c"`
+	Size                        int64  `json:"size"`
+	SourceETag                  string `json:"sourceETag"`
+	DestinationETag             string `json:"destinationETag"`
+	Rule                        string `json:"matchedRule,omitempty"`
+	Reason                      string `json:"reason,omitempty"`
+	VerifiedAt                  string `json:"verifiedAt"`
 }
 
 func checksums(file string) (string, string, int64, error) {
@@ -115,6 +116,9 @@ func (a *App) verifyDestination(ctx context.Context, m *MoveRecord) error {
 		if e != nil {
 			return e
 		}
+		if props.ETag == nil {
+			return errors.New("destination identity unavailable")
+		}
 		s.ETag = string(*props.ETag)
 		if props.ContentLength == nil || *props.ContentLength != m.Size {
 			return errors.New("destination size changed")
@@ -131,6 +135,11 @@ func (a *App) verifyDestination(ctx context.Context, m *MoveRecord) error {
 	}
 	if m.DestinationETag != "" && m.DestinationETag != s.ETag {
 		return errors.New("destination identity changed after verification")
+	}
+	if m.SkipDestinationVerification {
+		m.DestinationETag = s.ETag
+		m.VerifiedAt = ""
+		return nil
 	}
 	sha, crc, n, e := streamChecksums(ctx, s)
 	if e != nil {
@@ -206,7 +215,11 @@ func (a *App) finalizeMove(ctx context.Context, id string, s Snapshot, m MoveRec
 	if m.FinalState == "COMPLETED" || m.FinalState == "QUARANTINED" {
 		_, _ = a.DB.Exec("UPDATE jobs SET state='RECOVERED',error=?,updated_at=? WHERE id IN (SELECT parent_id FROM recovery_links WHERE child_id=?)", "Recovered by job "+id, stamp(), id)
 	}
-	a.Audit("routing.finalized", id, "Destination verified with size, SHA-256 and CRC32C; source deletion reconciled.")
+	message := "Destination verified with size, SHA-256 and CRC32C; source deletion reconciled."
+	if m.SkipDestinationVerification {
+		message = "Destination size and identity checked; content readback disabled by profile; source deletion reconciled."
+	}
+	a.Audit("routing.finalized", id, message)
 }
 func scanException(raw []byte) string {
 	var v map[string]any
@@ -277,7 +290,7 @@ func (a *App) routeCapturedNow(ctx context.Context, id string, s Snapshot, local
 		target = s.Bad
 	}
 	key := strings.TrimPrefix(destination, target.BaseURL()+"/")
-	m := MoveRecord{Phase: "DESTINATION_VERIFIED", Destination: destination, Target: target, Key: key, FinalState: state, Verdict: verdict, Digest: digest, CRC32C: crc, Size: n, SourceETag: s.sourceETag(), Rule: rule, Reason: reason}
+	m := MoveRecord{SkipDestinationVerification: s.Profile.SkipDestinationVerification, Phase: "DESTINATION_VERIFIED", Destination: destination, Target: target, Key: key, FinalState: state, Verdict: verdict, Digest: digest, CRC32C: crc, Size: n, SourceETag: s.sourceETag(), Rule: rule, Reason: reason}
 	if target.Type() == "blob" {
 		m.Phase = "DESTINATION_UPLOADED"
 	} else if e = a.verifyDestination(ctx, &m); e != nil {
@@ -293,5 +306,5 @@ func (a *App) routeCapturedNow(ctx context.Context, id string, s Snapshot, local
 }
 
 func publicMove(m MoveRecord) map[string]any {
-	return map[string]any{"phase": m.Phase, "sha256": m.Digest, "crc32c": m.CRC32C, "sizeBytes": m.Size, "sourceETag": m.SourceETag, "destinationETag": m.DestinationETag, "verifiedAt": m.VerifiedAt, "matchedRule": m.Rule, "reason": m.Reason}
+	return map[string]any{"destinationVerification": !m.SkipDestinationVerification, "phase": m.Phase, "sha256": m.Digest, "crc32c": m.CRC32C, "sizeBytes": m.Size, "sourceETag": m.SourceETag, "destinationETag": m.DestinationETag, "verifiedAt": m.VerifiedAt, "matchedRule": m.Rule, "reason": m.Reason}
 }

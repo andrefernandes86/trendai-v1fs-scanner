@@ -267,3 +267,28 @@ func TestInventoryTracksVersionsAndExplicitlyIgnoredFiles(t *testing.T) {
 		t.Fatal(status)
 	}
 }
+
+func TestDestinationVerificationProfileModes(t *testing.T) {
+	a, s, stores := reliabilityFixture(t)
+	os.WriteFile(stores["good"].p("result"), []byte("123456789"), 0600)
+	m := MoveRecord{Target: s.Good, Key: "result", Size: 9, Digest: "wrong", CRC32C: "wrong"}
+	if err := a.verifyDestination(context.Background(), &m); err == nil {
+		t.Fatal("default mode accepted mismatched contents")
+	}
+	m.SkipDestinationVerification = true
+	if err := a.verifyDestination(context.Background(), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.VerifiedAt != "" || m.DestinationETag == "" {
+		t.Fatal("fast mode misreported content verification")
+	}
+	m.Size = 10
+	if err := a.verifyDestination(context.Background(), &m); err == nil {
+		t.Fatal("fast mode accepted incorrect size")
+	}
+	m.Size = 9
+	m.DestinationETag = "changed"
+	if err := a.verifyDestination(context.Background(), &m); err == nil {
+		t.Fatal("fast mode accepted changed identity")
+	}
+}
