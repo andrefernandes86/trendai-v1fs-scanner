@@ -99,3 +99,5 @@ Repeat the safe-file and EICAR checks. Give the next operator the console URL, a
 External notifications remain deferred. Source and destination files are not deleted by history cleanup. Acknowledgement preserves failure evidence and does not certify the file as safe.
 
 Account handover: the next administrator can change the password through **AD → Change password**, using the current password. Previous sessions are invalidated. See the [review findings and regression coverage](code-review-20261021.md) for the latest recovery/scheduling/large-download corrections.
+
+For ADLS Gen2, follow the [ADLS setup, protocol matrix and acceptance checklist](adls-gen2.md). Automated adapter coverage is available; live HNS account acceptance must be completed with the customer's connection.

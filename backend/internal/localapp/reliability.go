@@ -179,7 +179,28 @@ func (a *App) finalizeMove(ctx context.Context, id string, s Snapshot, m MoveRec
 			b, e := m.Target.BlobClient(m.Key, "")
 			err = e
 			if err == nil {
-				_, err = b.SetTags(ctx, tags, &blob.SetTagsOptions{AccessConditions: &blob.AccessConditions{LeaseAccessConditions: &blob.LeaseAccessConditions{LeaseID: to.Ptr(destinationLeaseID(id))}}})
+				if m.Target.Kind == "adls" {
+					props, readErr := b.GetProperties(ctx, nil)
+					err = readErr
+					if err == nil {
+						metadata := props.Metadata
+						if metadata == nil {
+							metadata = map[string]*string{}
+						}
+						metadata["v1fs_result_tags"] = to.Ptr(encodeADLSTags(tags))
+						result, writeErr := b.SetMetadata(ctx, metadata, &blob.SetMetadataOptions{AccessConditions: &blob.AccessConditions{LeaseAccessConditions: &blob.LeaseAccessConditions{LeaseID: to.Ptr(destinationLeaseID(id))}, ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfMatch: props.ETag}}})
+						err = writeErr
+						if err == nil {
+							if result.ETag == nil {
+								err = errors.New("destination metadata identity unavailable")
+							} else {
+								m.DestinationETag = string(*result.ETag)
+							}
+						}
+					}
+				} else {
+					_, err = b.SetTags(ctx, tags, &blob.SetTagsOptions{AccessConditions: &blob.AccessConditions{LeaseAccessConditions: &blob.LeaseAccessConditions{LeaseID: to.Ptr(destinationLeaseID(id))}}})
+				}
 			}
 		}
 		if err != nil {

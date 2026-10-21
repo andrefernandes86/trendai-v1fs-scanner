@@ -20,7 +20,7 @@ import (
 )
 
 func (m Mount) Type() string {
-	if m.Kind == "" {
+	if m.Kind == "" || m.Kind == "adls" {
 		return "blob"
 	}
 	return m.Kind

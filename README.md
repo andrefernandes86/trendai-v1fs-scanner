@@ -100,3 +100,5 @@ Functional evidence: [archive validation](docs/validation/archive-inspection-202
 Profile setup now follows six short steps with a final review. Cards expand on demand, light/dark appearance covers the sidebar, and clickable outcome totals include a matching scan-error history filter. See the [illustrated user guide](docs/user-guide.md).
 
 See [wizard and monitoring validation](docs/validation/profile-wizard-20261020.md) for the current regression and live integration checks.
+
+ADLS Gen2 is available as a dedicated HTTPS storage integration alongside Blob, Azure Files, SMB and NFS. See [ADLS Gen2 setup and protocol choices](docs/adls-gen2.md).

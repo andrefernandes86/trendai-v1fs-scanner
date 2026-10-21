@@ -117,7 +117,7 @@ func ListBlobs(ctx context.Context, m Mount, prefix, marker string, nativeTags .
 	if e != nil {
 		return nil, "", e
 	}
-	wantTags := len(nativeTags) > 0 && nativeTags[0]
+	wantTags := len(nativeTags) > 0 && nativeTags[0] && m.Kind != "adls"
 	opts := &container.ListBlobsFlatOptions{Prefix: to.Ptr(m.Prefix + prefix), MaxResults: to.Ptr(int32(200)), Include: container.ListBlobsInclude{Metadata: true, Tags: wantTags}}
 	if marker != "" {
 		opts.Marker = &marker
@@ -145,11 +145,17 @@ func ListBlobs(ctx context.Context, m Mount, prefix, marker string, nativeTags .
 		if b.Name == nil || b.Properties == nil || b.Properties.ETag == nil || b.Properties.ContentLength == nil {
 			continue
 		}
+		if m.Kind == "adls" && (isADLSDirectory(b.Metadata) || strings.HasSuffix(*b.Name, ".v1fs-tags.json")) {
+			continue
+		}
 		v := BlobEntry{Tags: map[string]string{}, Metadata: map[string]string{}, TagsUnavailable: tagsUnavailable, Key: *b.Name, Size: *b.Properties.ContentLength, ETag: string(*b.Properties.ETag)}
 		for key, value := range b.Metadata {
 			if value != nil {
 				v.Metadata[key] = *value
 			}
+		}
+		if m.Kind == "adls" {
+			v.Tags = adlsResultTags(b.Metadata)
 		}
 		if b.BlobTags != nil {
 			for _, tag := range b.BlobTags.BlobTagSet {
@@ -251,7 +257,11 @@ func routeBytes(ctx context.Context, m Mount, key, path, digest, job, verdict st
 		return e
 	}
 	defer f.Close()
-	_, e = target.UploadFile(ctx, f, &blockblob.UploadFileOptions{BlockSize: int64(blockMiB) << 20, Concurrency: uint16(parallel), AccessConditions: &blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETag("*"))}}, Metadata: map[string]*string{"job": &job, "sha256": &digest, "verdict": &verdict}})
+	metadata := map[string]*string{"job": &job, "sha256": &digest, "verdict": &verdict}
+	if m.Kind == "adls" && len(tagSets) > 0 {
+		metadata["v1fs_result_tags"] = to.Ptr(encodeADLSTags(tagSets[0]))
+	}
+	_, e = target.UploadFile(ctx, f, &blockblob.UploadFileOptions{BlockSize: int64(blockMiB) << 20, Concurrency: uint16(parallel), AccessConditions: &blob.AccessConditions{ModifiedAccessConditions: &blob.ModifiedAccessConditions{IfNoneMatch: to.Ptr(azcore.ETag("*"))}}, Metadata: metadata})
 	if e != nil {
 		var re *azcore.ResponseError
 		if !errors.As(e, &re) || re.StatusCode != 412 {

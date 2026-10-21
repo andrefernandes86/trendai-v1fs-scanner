@@ -317,3 +317,7 @@ In **Scan profiles → Edit profile → Options → Transfer speed**, use **Veri
 - **Off:** skip the full destination readback. Upload completion, size, destination identity, result tags and source identity checks remain required. This saves a full destination download but does not independently prove identical contents.
 
 This applies to Azure Blob and share destinations. Scanning is unchanged. Existing profiles remain enabled, and queued jobs retain the setting captured when submitted. Record details show the selected verification mode; a skipped readback is never recorded as a successful content verification. Share handoff checks and small tag-sidecar verification remain enabled.
+
+### ADLS Gen2 storage
+
+Select **Azure Data Lake Storage Gen2 (HTTPS)** when adding a storage connection. Enter your account, filesystem as the container name, and account key or SAS. The connection can be used as a source or result destination. See [ADLS Gen2 setup and protocol choices](adls-gen2.md) for HTTPS, NFS, DFS and SFTP details, result metadata and the PoC acceptance checklist.

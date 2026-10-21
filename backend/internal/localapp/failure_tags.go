@@ -32,6 +32,9 @@ func (a *App) tagExhaustedSource(id, stage, verdict string) error {
 	if verdict != "CLEAN" && verdict != "MALICIOUS" {
 		tags["scanned"] = "false"
 	}
+	if s.Source.Kind == "adls" {
+		return a.tagADLSFailure(ctx, id, s, tags, verdict)
+	}
 	if s.Source.Type() == "blob" {
 		locked, release, err := leaseDestination(ctx, id, MoveRecord{Target: s.Source, Key: s.sourceKey()})
 		if err != nil {

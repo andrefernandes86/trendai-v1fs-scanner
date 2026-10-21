@@ -119,3 +119,8 @@
 .profile-routing-help{margin-top:20px;font-size:11px;color:var(--dark-muted,#63738c)}.profile-routing-help summary{cursor:pointer}.profile-routing-help p{margin-top:12px;font-size:11px;max-width:850px}:root:not([data-theme="dark"]) .security-note small,:root:not([data-theme="dark"]) .workspace small,:root:not([data-theme="dark"]) .account small{color:#64758f}
 
 .job-submitted{white-space:nowrap;font-size:12px;min-width:175px}
+
+.adls-info { display: block; }
+.adls-info details { margin-top: 10px; }
+.adls-info ul { padding-left: 20px; margin: 8px 0 0; }
+.adls-info li + li { margin-top: 5px; }

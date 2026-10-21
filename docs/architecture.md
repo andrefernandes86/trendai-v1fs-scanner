@@ -12,7 +12,7 @@ flowchart LR
   Engine <--> DB
   Engine --> Scan[Isolated concurrent SDK children]
   Scan --> Vision[Vision One cloud or local scanner]
-  Engine <--> Storage[Sources and routing destinations]
+  Engine <--> Storage[Sources and routing destinations: Blob, ADLS, Files, SMB, NFS]
 ```
 
 ## Process ownership and responsiveness
@@ -39,7 +39,7 @@ Share sources use persisted private claims under `.v1fs-claims/<job-id>/...`; pr
 
 The official Vision One SDK handles cloud or local scanning. Compact and verbose ATSE/TrendX results are normalized. Error-bearing, incomplete or unsupported results remain UNKNOWN; detections never become clean because another engine failed.
 
-Routing preserves original bytes, publishes without overwriting another file, reads back the destination and verifies size, SHA-256 and CRC32C before removing the unchanged source. Names are `original-name_<job-id>.ext`. The app adds no ZIP wrapping/password. Native Blob tags or share JSON sidecars record configured result tags.
+Routing preserves original bytes, publishes without overwriting another file, by default reads back the destination and verifies size, SHA-256 and CRC32C before removing the unchanged source. Profiles can disable destination content readback while retaining upload, size, identity and ownership checks. Names are `original-name_<job-id>.ext`. The app adds no ZIP wrapping/password. Native Blob tags, ADLS metadata or share JSON sidecars record configured result labels. See [ADLS Gen2 integration](adls-gen2.md) for protocol and metadata details.
 
 Scan, transfer and deletion have separate bounded retry budgets. A verified scan is reused after transfer failure. UNKNOWN files route to scan-failed storage for review; configured recovery creates linked rescan jobs with bypass rules disabled. Exclusions are explicitly EXCLUDED / NOT SCANNED and still require transfer verification. Hold rules take priority and leave files at source.
 

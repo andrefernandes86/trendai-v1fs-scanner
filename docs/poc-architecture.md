@@ -19,7 +19,7 @@ Download the diagram as [SVG](images/solution-architecture.svg) or [PNG](images/
 | Optional archive extractor | Separate credential-free process; Landlock/seccomp, size/count/ratio/depth/time/process limits; fails closed. |
 | SDK child process | One isolated process per scan; keeps endpoint settings separate between concurrent requests. The SDK serves file ranges requested by the service; the app does not truncate to 2 GiB. |
 | File Security service | Cloud regional service or separately deployed local scanner. Inspection depth, format support, licensing and quotas belong to this service. |
-| Storage connectors | Azure Blob, Azure Files, SMB and NFSv3 TCP AUTH_SYS. Application connections, not privileged OS mounts. |
+| Storage connectors | Azure Blob, ADLS Gen2 via Blob HTTPS, Azure Files, SMB and NFSv3 TCP AUTH_SYS. Application connections, not privileged OS mounts. |
 | Routing and integrity | Publishes original bytes with unique names and tags, verifies size/SHA-256/CRC32C, then removes only the captured unchanged source identity. |
 | Persistent data volume | SQLite WAL database, master encryption key, results/audit, move/claim records and source captures. Back up database and key together. |
 | Destinations | Distinct clean, malicious/quarantine and scan-failed containers or shares. Restrict quarantine and failed storage using storage permissions. |
@@ -46,7 +46,7 @@ flowchart TB
         Workers <--> Disk[Persistent captures and disk reservations]
     end
     SDK --> Service[Vision One cloud region OR local scanner]
-    Source[Source: Blob / Azure Files / SMB / NFS] --> Engine
+    Source[Source: Blob / ADLS / Azure Files / SMB / NFS] --> Engine
     Workers --> Clean[Clean destination]
     Workers --> Bad[Malicious / quarantine destination]
     Workers --> Failed[Scan-failed destination]
@@ -131,3 +131,5 @@ Enable the option on a dedicated profile and follow [archive acceptance checks](
 ## Current processing and console controls
 
 See [transfer performance](performance-tuning.md) for the independent scan and transfer pools, shared/per-profile limits and one-pass leased Blob integrity check. The overview shows both queue depths; file records expose stage durations. See [user guide](user-guide.md) for light/dark appearance, reversible history hiding and simplified sizing. Hidden records never suppress held-file assurance alerts.
+
+ADLS Gen2 setup, protocol choices and result metadata are documented in the [ADLS integration guide](adls-gen2.md). Validate a real HNS account as part of the customer acceptance checklist.
