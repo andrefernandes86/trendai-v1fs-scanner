@@ -334,6 +334,20 @@ func (a *App) workerNamed(ctx context.Context, name string, retirement ...<-chan
 func (a *App) process(parent context.Context, id string, s Snapshot, attempt int) {
 	ctx, cancel := context.WithTimeout(parent, s.Profile.JobTimeout())
 	defer cancel()
+	// A completed handoff is historical evidence, never a reason to reopen storage.
+	if move, err := a.loadMove(id); err == nil && move.Phase == "COMPLETED" {
+		_ = a.transition(id, move.FinalState, move.Verdict, move.Digest, move.Destination, move.Reason, 0)
+		return
+	}
+	var recovered int
+	if err := a.DB.QueryRow("SELECT count(*) FROM recovery_links WHERE child_id=?", id).Scan(&recovered); err != nil {
+		return
+	}
+	if recovered > 0 {
+		_, _ = a.DB.Exec("UPDATE jobs SET state='ACKNOWLEDGED',updated_at=?,error=error || ' Recovery stopped: delivered files are managed by the downstream application.' WHERE id=?", stamp(), id)
+		a.Audit("job.acknowledged", id, "Legacy destination recovery cancelled before storage access; delivered files remain externally managed.")
+		return
+	}
 	if action, rule := s.Profile.FilePolicy(strings.TrimPrefix(s.Key, s.Source.Prefix+s.Profile.Prefix), s.Size); action == "hold" || action == "ignore" {
 		_ = a.transition(id, "HELD", "NOT_SCANNED", "", "", "Policy "+action+": "+rule, 0)
 		return
@@ -492,7 +506,6 @@ func (a *App) monitor(ctx context.Context) {
 	slots := make(chan struct{}, 4)
 	var monitors sync.WaitGroup
 	defer monitors.Wait()
-	lastRecovery := time.Now().Add(-time.Minute)
 	defer ticker.Stop()
 	for {
 		select {
@@ -500,17 +513,7 @@ func (a *App) monitor(ctx context.Context) {
 			return
 		case <-ticker.C:
 		}
-		if time.Since(lastRecovery) > time.Minute {
-			lastRecovery = time.Now()
-			monitors.Add(1)
-			go func() {
-				defer monitors.Done()
-				c, cancel := context.WithTimeout(ctx, 50*time.Second)
-				defer cancel()
-				a.reconcileHistorical(c)
-				a.recoverySweep(c)
-			}()
-		}
+
 		a.beat("monitor")
 		profiles, e := a.List("profiles")
 		if e != nil {

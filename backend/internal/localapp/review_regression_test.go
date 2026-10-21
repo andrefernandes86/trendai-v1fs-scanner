@@ -2,8 +2,6 @@ package localapp
 
 import (
 	"context"
-	"os"
-	"strings"
 	"testing"
 )
 
@@ -33,74 +31,17 @@ func isolatedRecoveryFixture(t *testing.T) (*App, Snapshot, map[string]*diskShar
 	return a, s, stores, parent
 }
 
-func TestReviewRecoveryCannotBypassSizePolicy(t *testing.T) {
-	a, s, _, parent := isolatedRecoveryFixture(t)
-	s.Profile.MaxScanBytes = 1
-	s.Profile.OversizeAction = "clean"
-	s.Profile.GoodPrefix = "changed"
-	s.Profile.GoodMount = "changed"
-	a.Save("profiles", s.Profile.ID, s.Profile)
-	child, err := a.recoverJob(context.Background(), parent, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, snap, n, err := a.claim()
-	if err != nil || id != child {
-		t.Fatal(id, err)
-	}
-	if snap.ExpectedDigest == "" || snap.Profile.OversizeAction != "hold" || snap.Profile.GoodPrefix != "" || snap.Profile.GoodMount != s.Good.ID {
-		t.Fatal("unsafe recovery snapshot")
-	}
-	a.process(context.Background(), id, snap, n)
-	var state, verdict string
-	a.DB.QueryRow("SELECT state,verdict FROM jobs WHERE id=?", child).Scan(&state, &verdict)
-	if state != "HELD" || verdict != "NOT_SCANNED" {
-		t.Fatal(state, verdict)
-	}
-}
-
-func TestReviewRecoveryRejectsChangedBytes(t *testing.T) {
-	a, _, stores, parent := isolatedRecoveryFixture(t)
-	move, err := a.loadMove(parent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.WriteFile(stores["failed"].p(move.Key), []byte("different"), 0600)
-	calls := 0
-	a.scanFn = func(context.Context, string, Scanner, Profile) ([]byte, error) {
-		calls++
-		return []byte(`{"scanId":"x","scanResult":0}`), nil
-	}
-	child, err := a.recoverJob(context.Background(), parent, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, snap, n, err := a.claim()
-	if err != nil || id != child {
-		t.Fatal(id, err)
-	}
-	a.process(context.Background(), id, snap, n)
-	var state, message string
-	a.DB.QueryRow("SELECT state,error FROM jobs WHERE id=?", child).Scan(&state, &message)
-	if state != "HELD" || calls != 0 || !strings.Contains(message, "differs") {
-		t.Fatal(state, calls, message)
-	}
-}
-
-func TestReviewRepeatedShareRecoveryTracksMovedSource(t *testing.T) {
+func TestReviewDeliveredRecoveryDisabled(t *testing.T) {
 	a, _, _, parent := isolatedRecoveryFixture(t)
-	first, err := a.recoverJob(context.Background(), parent, false)
-	if err != nil {
-		t.Fatal(err)
+	for _, enrich := range []bool{false, true} {
+		if _, err := a.recoverJob(context.Background(), parent, enrich); err == nil {
+			t.Fatal("destination access permitted")
+		}
 	}
-	id, snap, n, err := a.claim()
-	if err != nil || id != first {
-		t.Fatal(id, err)
-	}
-	a.process(context.Background(), id, snap, n)
-	second, err := a.recoverJob(context.Background(), parent, false)
-	if err != nil || second == first {
-		t.Fatal(second, err)
+	var children int
+	a.DB.QueryRow("SELECT count(*) FROM recovery_links WHERE parent_id=?", parent).Scan(&children)
+	if children != 0 {
+		t.Fatal("created recovery work after handoff")
 	}
 }
 

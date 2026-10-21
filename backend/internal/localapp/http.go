@@ -316,6 +316,13 @@ func (a *App) profiles(w http.ResponseWriter, r *http.Request) {
 		problem(w, 500, "Could not read profiles.")
 		return
 	}
+	for i, raw := range p {
+		var profile Profile
+		if json.Unmarshal(raw, &profile) == nil {
+			profile.RecoveryEnabled = false
+			p[i], _ = json.Marshal(profile)
+		}
+	}
 	respond(w, 200, p)
 }
 func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
@@ -323,6 +330,7 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
+	p.RecoveryEnabled = false // Delivered files belong to the downstream application.
 	if p.ID != r.PathValue("id") || !idPattern.MatchString(p.ID) || p.Name == "" {
 		problem(w, 400, "A profile ID and name are required.")
 		return
@@ -446,6 +454,10 @@ func (a *App) retryJob(w http.ResponseWriter, r *http.Request) {
 	var currentState string
 	if a.DB.QueryRow("SELECT state FROM jobs WHERE id=?", r.PathValue("id")).Scan(&currentState) != nil || (currentState != "HELD" && currentState != "RETRY_PENDING") {
 		problem(w, 409, "Only held/retrying jobs can be retried.")
+		return
+	}
+	if move, err := a.loadMove(r.PathValue("id")); err == nil && move.Phase == "COMPLETED" {
+		problem(w, 409, "Delivery is complete and the downstream application owns this file. Dismiss the record or submit a new source upload to scan again.")
 		return
 	}
 	_, _ = a.DB.Exec("DELETE FROM stage_attempts WHERE job_id=?", r.PathValue("id"))

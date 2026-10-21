@@ -21,7 +21,7 @@ The current host runs the supervised Docker container with restart policy and pe
 
 Generated safe/EICAR test files enter the configured source and use the real monitor/scanner/routing pipeline. EICAR is a standard antivirus test pattern and is never executed. Diagnostic scanner buttons operate separately from routing. Test requests and responses redact credentials.
 
-Existing unknown files created before the verbose TrendX parsing fix are historical results. Re-upload a copy to the source to scan under the fixed logic; record details now offer explicit failed-file recovery. Do not label old unknown records clean without rescanning their exact bytes.
+Existing unknown files created before the verbose TrendX parsing fix are historical results. Re-upload a copy to the source to scan under the fixed logic; delivered files are not rescanned in place. Record refresh reloads saved history only. Do not label old unknown records clean without rescanning their exact bytes.
 
 ## Deploy on the current host
 

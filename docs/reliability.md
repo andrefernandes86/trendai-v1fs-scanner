@@ -18,7 +18,7 @@ Preview reports scan/exclude/hold/ignore counts and sample matches; previews abo
 
 Defaults: 5 scan attempts, 8 transfer/download attempts, 12 source-delete attempts, 10-second exponential retry base with jitter and a one-hour cap. Limits are profile settings. A successful scan verdict is reused after a transfer failure, so transfer retries do not consume scan attempts. Scanner request failures and transient unknown responses retry before isolation. Recognized permanent exceptions such as password-protected archives, unsupported formats and scan/decompression limits go to scan-failed review without pretending the file is clean. Review the retained encrypted scanner response for the exact cause.
 
-Exhausted scan attempts route to the scan-failed destination if it can be verified. Exhausted transfer attempts retain the source. Exhausted delete attempts retain the verified destination and leave the job HELD. An explicit Retry resets stage budgets using the immutable job policy snapshot; use failed-file recovery for a new scan with current scanner settings.
+Exhausted scan attempts route to the scan-failed destination if it can be verified. Exhausted transfer attempts retain the source. Exhausted delete attempts retain the verified destination and leave the job HELD. An explicit Retry resets stage budgets using the immutable job policy snapshot; once delivered, submit a new source upload for another scan. Destination recovery is disabled.
 
 ## Verified move and restart recovery
 
@@ -26,19 +26,19 @@ The durable move record stores destination, phase, size, SHA-256, CRC32C, source
 
 1. Download an identified source version and compute content checksums over the captured bytes.
 2. Scan or apply the explicit exclusion policy.
-3. Publish exclusively to the selected destination. Read back and compare size/SHA-256, then CRC32C.
+3. Publish exclusively to the selected destination and persist the upload checkpoint.
 4. Persist the verified move before deleting anything at source.
-5. Acquire a renewable 60-second Blob destination lease, where applicable. Re-read and verify destination identity/checksums under that lease. Loss of the lease cancels finalization; release uses a bounded independent cleanup context.
+5. Acquire a renewable 60-second Blob destination lease, where applicable. Check size and identity; when destination content verification is enabled, stream the readback and calculate SHA-256/CRC32C together. Apply result labels before handoff. Loss of the lease cancels finalization; release uses a bounded independent cleanup context.
 6. Persist SOURCE_DELETE_PENDING. Delete only the captured source identity. Blob deletion uses If-Match; shares require the operator's controlled-writer handoff setting plus identity/digest checks.
-7. Persist move completion and job outcome. If a crash occurred after deletion, a retry re-verifies the persisted destination and reconciles an already-absent source without rescanning.
+7. Persist move completion and job outcome. Completed checkpoints reconcile from saved history without reopening storage. If a crash happened before completion was persisted, the incomplete move may still perform the configured transfer checks and reconcile source deletion.
 
 CRC32C supplements SHA-256; it does not prove upload completion or make a filename/ETag a content checksum. Conditional Blob deletion rejects a changed source. A renewable destination lease needs the relevant Blob lease/write permissions; failure preserves source and becomes a delete-stage retry.
 
 SMB/NFS/Azure Files do not expose the same atomic check/unlink contract through these connectors. For them, finalization requires the controlled-writer checkbox, meaning producers have closed/handed off the source and external writers cannot replace the destination. The tool cannot enforce another application's cooperation. Leave this disabled if that contract is unavailable: copies remain verified but source deletion is held. Document network-storage permissions and ownership before enabling it.
 
-## Recovery and historical enrichment
+## Downstream ownership after handoff
 
-Record details offer Rescan isolated file and Refresh detection details. Recovery reads only the specific verified destination linked to the failed job, uses current scanner settings and disables bypass rules. It creates a new immutable job linked to the parent. A clean or malicious recovery marks the historical parent RECOVERED without rewriting its old UNKNOWN verdict. A still-unknown result remains isolated. Optional scheduled recovery uses a per-profile interval and parent recovery budget; it does not monitor every file in destination folders. An active/resolved child prevents duplicate recovery. Historical enrichment checks the destination digest before collecting a response and leaves the old verdict unchanged.
+Record refresh reads saved history only. Files in all completed delivery destinations (clean, malicious and scan failed) are managed by the downstream application. Recovery/enrichment endpoints reject requests before storage access; automatic destination reconciliation is disabled, and legacy queued recovery jobs are stopped before they touch storage. Incomplete moves may still perform configured transfer checks and source deletion until handoff is recorded complete.
 
 ## Alerts, retention and operations
 
@@ -62,4 +62,6 @@ For share **destinations**, the separate scanner-managed-writers setting is stil
 
 ## Parallel admission and profile changes
 
-The shared engine defaults to eight worker slots. Per-profile simultaneous limits default to two and cap active files through routing, with live limit changes applied only to new admissions. An active source version is deduplicated across profile revisions, so changing a limit while files wait does not create competing jobs. Each admitted job retains its scan/routing snapshot. API restart never requeues engine-owned jobs; engine startup alone resets interrupted work and reconciles persisted moves/claims.
+The engine automatically follows saved profile concurrency (default two, 1–32 per profile), with no hidden eight-worker cap. Scan slots cover download and scanning; transfers use a separate pool. Live changes apply to new admissions. An active source version is deduplicated across profile revisions, so changing a limit while files wait does not create competing jobs. Each admitted job retains its scan/routing snapshot. API restart never requeues engine-owned jobs; engine startup alone resets interrupted work and reconciles persisted moves/claims.
+
+The controlled-writer contract for share destinations applies during delivery/finalization. After the completed handoff, the downstream application owns the destination lifecycle.

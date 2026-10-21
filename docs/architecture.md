@@ -41,7 +41,7 @@ The official Vision One SDK handles cloud or local scanning. Compact and verbose
 
 Routing preserves original bytes, publishes without overwriting another file, by default reads back the destination and verifies size, SHA-256 and CRC32C before removing the unchanged source. Profiles can disable destination content readback while retaining upload, size, identity and ownership checks. Names are `original-name_<job-id>.ext`. The app adds no ZIP wrapping/password. Native Blob tags, ADLS metadata or share JSON sidecars record configured result labels. See [ADLS Gen2 integration](adls-gen2.md) for protocol and metadata details.
 
-Scan, transfer and deletion have separate bounded retry budgets. A verified scan is reused after transfer failure. UNKNOWN files route to scan-failed storage for review; configured recovery creates linked rescan jobs with bypass rules disabled. Exclusions are explicitly EXCLUDED / NOT SCANNED and still require transfer verification. Hold rules take priority and leave files at source.
+Scan, transfer and deletion have separate bounded retry budgets. A verified scan is reused after transfer failure. UNKNOWN files route to scan-failed storage for review. Delivered files are owned by the downstream application; no automatic destination recovery, historical content readback or rescanning occurs after handoff. Exclusions are explicitly EXCLUDED / NOT SCANNED and still require transfer verification. Hold rules take priority and leave files at source.
 
 ## Dashboard and health
 

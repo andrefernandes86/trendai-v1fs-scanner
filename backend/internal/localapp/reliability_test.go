@@ -195,50 +195,6 @@ func TestUnknownScanRetriesBeforeIsolation(t *testing.T) {
 		t.Fatal("isolated bytes not moved after verification")
 	}
 }
-func TestRecoveryCreatesNewHistoryAndEnrichmentPreservesVerdict(t *testing.T) {
-	a, s, _ := reliabilityFixture(t)
-	s.Profile.RecoveryAttempts = 2
-	s.Profile.RecoveryEnabled = true
-	for _, m := range []Mount{s.Source, s.Good, s.Bad, s.Failed} {
-		_ = a.Save("mounts", m.ID, m)
-	}
-	_ = a.Save("profiles", s.Profile.ID, s.Profile)
-	_ = a.Save("scanner", "default", Scanner{Type: "local", Address: "scanner:50051"})
-	a.scanFn = func(context.Context, string, Scanner, Profile) ([]byte, error) {
-		return []byte(`{"scanId":"x","foundErrors":[{"description":"unsupported format"}]}`), nil
-	}
-	parent, _ := a.insertJob(s)
-	_, snap, n, _ := a.claim()
-	a.process(context.Background(), parent, snap, n)
-	a.scanFn = func(context.Context, string, Scanner, Profile) ([]byte, error) {
-		return []byte(`{"scanId":"new","scanResult":0}`), nil
-	}
-	child, e := a.recoverJob(context.Background(), parent, false)
-	if e != nil || child == parent {
-		t.Fatal(child, e)
-	}
-	id, recovered, attempt, e := a.claim()
-	if e != nil || id != child {
-		t.Fatal(id, e)
-	}
-	a.process(context.Background(), id, recovered, attempt)
-	var state, verdict string
-	a.DB.QueryRow("SELECT state,verdict FROM jobs WHERE id=?", child).Scan(&state, &verdict)
-	if state != "COMPLETED" || verdict != "CLEAN" {
-		t.Fatal(state, verdict)
-	}
-	a.DB.QueryRow("SELECT state FROM jobs WHERE id=?", parent).Scan(&state)
-	if state != "RECOVERED" {
-		t.Fatal(state)
-	}
-	if _, e = a.recoverJob(context.Background(), child, true); e != nil {
-		t.Fatal(e)
-	}
-	a.DB.QueryRow("SELECT verdict FROM jobs WHERE id=?", parent).Scan(&verdict)
-	if verdict != "UNKNOWN" {
-		t.Fatal("historical verdict rewritten")
-	}
-}
 func TestInventoryTracksVersionsAndExplicitlyIgnoredFiles(t *testing.T) {
 	a, s, stores := reliabilityFixture(t)
 	p := s.Profile

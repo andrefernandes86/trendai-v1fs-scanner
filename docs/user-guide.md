@@ -112,7 +112,7 @@ The defaults are ready to use. Open only the setting you want to customize:
 | Transfer speed | How many files are delivered together and Azure Blob upload tuning. |
 | Upload checks and retries | Quiet period, separate scan/copy/delete attempts, retry delay, temporary-file patterns and share ownership. |
 | Exclusions and hold rules | Optional path/size exceptions. Hold leaves files at source. Bypass routes them to clean storage as **NOT SCANNED** after integrity verification. Use Preview matches first. |
-| Failed-file recovery | Scheduled rescans of isolated unknown files, with a wait and recovery budget. |
+| Destination handoff | Delivered files belong to the downstream application; no automatic recovery, rescan, retagging, movement or deletion after handoff. |
 
 ![Wizard step 5: optional settings stay collapsed](images/profile-options.png)
 
@@ -169,7 +169,7 @@ In **File activity**, the counter shows exactly how many records match, for exam
 | ROUTING | Copying/verifying the destination or finalizing deletion | Wait; inspect errors if it stays here |
 | CLEAN / COMPLETED | Clean scan and completed verified move | Use the file in clean storage |
 | MALICIOUS / QUARANTINED | Threat detected and routed | Follow your security investigation process |
-| UNKNOWN / HELD | Unclassified scan or work needing review | Read the error and verified destination; fix the cause, then use the appropriate retry/recovery action |
+| UNKNOWN / HELD | Unclassified scan or work needing review | Read the error and verified destination; retry only if delivery has not completed, or dismiss the record; submit a new source upload for another scan |
 | EXCLUDED / NOT SCANNED | Bypass rule was applied | Review the rule; this is not evidence of a clean scan |
 | RETRY_PENDING | A temporary problem is scheduled for another attempt | Check error and retry limits |
 
@@ -207,17 +207,17 @@ Open **File details** to see the exact destination's linked scan record, malware
 
 **Files held for review** is a separate condition. Click **Review held files**, open the record and read its error. Fix credentials, file identity or destination permissions before retrying. A file that was merely renamed or re-uploaded is not automatically assumed safe.
 
-An old source-read failure can become **SUPERSEDED** only if a later successful scan covers the same recorded filename/profile/source and exact SHA-256, its destination bytes are freshly reverified, and the old source identity is absent or replaced. This resolves a historical duplicate warning without changing its original UNKNOWN verdict/error or deleting a file. Missing evidence, changed destination bytes, source access errors or an unchanged original still at source keep the record HELD. Audit log records the verified replacement job.
+Older releases could mark historical source-read failures **SUPERSEDED** after rechecking a later destination. Those historical records remain available, but automatic destination rechecks are now disabled. Dismiss obsolete held records explicitly; completed destination files belong to the downstream application.
 
 ## Sizing for 12,000 files per day
 
-Choose **Sizing calculator**, directly after Audit log. It starts with 12,000 files/day, an 8-hour processing window, 5 MiB average / 100 GB maximum file size, a 4× arrival peak, one second per reference 5 MiB file and 2× headroom. Under those assumptions, the application-host estimate is **4 vCPU, 4 GiB RAM, 1040 GiB SSD and 4 simultaneous active files**. The disk estimate includes 90 days of 32 KiB/job history, WAL/growth allowance, temporary files and free-space reserve. It does not include remote destination storage or a separately hosted local scan engine.
+Choose **Sizing calculator**, directly after Audit log. The large-file example starts with 12,000 files/day, an 8-hour processing window, 1 GiB average / 100 GB maximum size, a 4× arrival peak, 180 seconds per 1 GiB reference file and 2× headroom. A separate button selects a 3.5 GB / 10-minute example. These are explicit planning assumptions; enter measurements for your file mix and network.
 
-**The calculator does not change profile settings.** GB means 1 billion bytes. Profiles now allow original-file submission up to 100 GB, subject to scanner inspection/format limits. Configure concurrency, timeout and oversized handling in the profile. The maximum size reserves temporary disk. Average size also scales projected processing time: reference seconds × max(1, average MiB ÷ reference MiB). This is an explicit linear planning assumption, not a vendor performance guarantee. CPU/RAM grow through concurrency; above 32 slots, additional hosts are required, so consult total CPU/RAM as well as per-host values. Replace the one-second example with measured download, scan, routing and verification time for representative files, especially large files.
+**The calculator does not change profile settings.** GB means 1 billion bytes; 1 GiB is 1,024 MiB. The maximum size reserves local working space, while average/reference sizes scale projected processing time proportionally. Required active-file slots are distributed using the editable Planned active files per host value. That density is not a product cap: multiple profiles can run on one host. CPU/RAM are heuristic budgets, not measured or vendor-certified requirements. Local SSD includes history, one captured copy per active file by default, and free-space reserve; archives need additional workspace. Destination retention is not configured or managed by this tool.
 
 ![Sizing calculator with transparent planning inputs](images/sizing-calculator.png)
 
-Adjust the inputs to your real workload, especially measured time through download/scan/verified move, file sizes and retention. Open **Advanced settings — timing, bursts and storage** and **Formulas and limits** to inspect the model. Calculator changes do not change profiles, delete history or configure hardware. Use the resulting concurrency as a starting point in **Scan profiles → Edit profile → Schedule → Files scanned at once** and ensure the shared engine worker cap is high enough. Profile settings above that cap do not create additional workers. Validate representative documents, large files/archives, retries and storage latency before treating this as a capacity commitment.
+Adjust the inputs to your real workload, especially measured time through download/scan/verified move, file sizes and local history retention. Open **Advanced settings — timing, bursts and storage** and **Formulas and limits** to inspect the model. Calculator changes do not change profiles, delete history or configure hardware. Use the resulting concurrency as a starting point in **Scan profiles → Edit profile → Schedule → Files scanned at once** and ensure the shared engine worker cap is high enough. Profile settings above that cap do not create additional workers. Validate representative documents, large files/archives, retries and storage latency before treating this as a capacity commitment.
 
 These are application planning estimates, not vendor-certified requirements. Cloud scanner compute is hosted by Trend; local scanner compute must be sized separately using the scanner's own guidance. [File Security overview](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-what-is-file-security) · [Containerized scanner](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-file-security-containerized-scanner).
 
@@ -285,7 +285,7 @@ Result tags automatically include `scan-failed=true` and `scanned=false` for inc
 
 When scan, download or copy retries are exhausted, the record is held with `scan-failed=true` and `failure-stage`. The retained source receives these labels as native Blob tags or a share JSON sidecar, after a source-version check. Existing Blob tags are preserved. If storage access, tag capacity, or source identity prevents annotation, record details explicitly report that the source tag could not be written. A copy failure does not erase a confirmed scan verdict or remove the source.
 
-Failed-file recovery reaffirms `scan-failed=true` when the result remains unknown. The file remains in its isolated Scan failed storage location, including a scanner-managed claim on shares, instead of being copied back into the input or promoted to Safe files. Exhausting recovery cycles leaves it held for manual review.
+Files moved to Scan failed keep their recorded failure labels. After handoff the scanner does not reopen, rescan, retag, move or delete them. Review stored history, dismiss unwanted held records, or submit a new source upload to request another scan.
 
 ## Stop scanning a held file
 
@@ -331,3 +331,13 @@ Open **Scan profiles → Edit profile → Schedule → Files scanned at once** a
 Changes apply live. Raising the value releases eligible queued work within about one second. Lowering it lets current scans finish and waits before admitting more. Overview's **Configured scan capacity** shows the total from saved profiles; **Scanning now** shows current activity. Large-file, archive, disk-capacity and transfer controls still apply to their respective stages.
 
 ![Configured scan capacity follows saved profile settings](images/profile-concurrency.png)
+
+### Large-file sizing examples and working space
+
+The sizing calculator starts with **12,000 files/day**, **1 GiB average files**, a **100 GB maximum**, and an illustrative **180-second end-to-end time per 1 GiB file**. The **3.5 GB / 10-minute example** provides another large-file planning preset. These assumptions are not vendor benchmarks; measure download, scanning, upload, optional destination readback and source removal with your own profile.
+
+**Local working-space allowance** reserves temporary disk capacity; it does not create copies. The default **1×** budgets one downloaded copy for each active file. A 100 GB file needs approximately 100 GB of local working space. Upload streams that captured copy, so a second local file is not normally required. Set 2× if you want extra space; archive extraction needs its own additional disk budget. Destination lifecycle belongs to the downstream application; the calculator does not configure retention.
+
+**Planned active files per host** is an editable load-distribution assumption, not a product limit. The estimated host count divides required active-file slots by that density. Each profile supports up to 32 scans, and multiple profiles can run on a host. CPU/RAM outputs are heuristic budgets, not measured or vendor-certified requirements; confirm them through a representative load test. Timing scales proportionally with average/reference file size, so replace the baseline when small-file overhead or archive processing changes that relationship.
+
+Delivered files belong to your downstream application. After the transfer checks, labels and source removal complete, this scanner does not automatically revisit them for recovery, historical enrichment or retention. Refresh in record details reloads saved history only. For another scan, submit a new source upload.

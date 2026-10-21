@@ -27,17 +27,17 @@ Rules are optional. Without a rule, ready files are scanned normally. Give each 
 
 Hold leaves matching files at source without scanning or routing. Bypass sends matching files to clean storage with an EXCLUDED / NOT SCANNED result after integrity verification; this is not a clean scan verdict. Hold takes priority over bypass. Preview matches reads the current source using the draft rules without moving files; saving applies rules to future jobs.
 
-## Retry and recovery settings
+## Source retries and destination handoff
 
 The quiet period requires an unchanged identity across source observations. It is a stability heuristic, not a guarantee that a producer will never resume writing. Schedule frequency determines when observations occur.
 
 Attempt limits include the first attempt and are independent for scan, copy and source deletion. Retry delay grows exponentially from the base, with jitter, capped at one hour. A processing deadline creates a console alert and does not discard a file. Destination-share writer confirmation applies only when the destination is scanner-managed with no competing writers; Blob destinations use leases.
 
-Recovery applies to isolated UNKNOWN jobs after initial scan attempts have failed. Each recovery cycle creates a linked job with its own scan-attempt budget. The interval is in seconds (3,600 = one hour), checked by the recovery scheduler. A maximum of three cycles means three recovery jobs per failed parent, not three total SDK attempts. Exhausted files stay isolated for manual review. Detected malicious files are not automatically recovered. Recovery does not discover arbitrary files in destination storage, and bypass rules do not apply during recovery.
+After delivery completes, the downstream application manages file lifecycle. Destination recovery and enrichment are disabled. Legacy queued recovery work stops before storage access. Resubmit a new source file to scan again.
 
 ## Reliability settings
 
-Profile sections 6–8 configure quiet periods/temporary ignores, retries, exclusions/hold rules and isolated-file recovery. Preview exclusion matches before saving. Share deletion requires confirming the producer handoff and controlled destination-writer contract. Overview exposes processing alerts and inventory export; File activity provides date/verdict filters, pages and explicit retention preview/apply. Record details show integrity evidence and manual recovery/enrichment actions. See [reliability](reliability.md) for operational semantics.
+Profile sections 6–8 configure quiet periods/temporary ignores, retries, exclusions/hold rules and destination handoff. Preview exclusion matches before saving. Share deletion requires confirming the producer handoff and controlled destination-writer contract. Overview exposes processing alerts and inventory export; File activity provides date/verdict filters, pages and explicit retention preview/apply. Record details show stored integrity evidence. Refresh reloads saved history without reading destination bytes. See [reliability](reliability.md) for operational semantics.
 
 ## Parallel processing
 
