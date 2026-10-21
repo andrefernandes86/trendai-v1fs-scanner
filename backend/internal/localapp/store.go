@@ -8,7 +8,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	_ "modernc.org/sqlite"
 	"net/url"
 	"os"
@@ -367,14 +366,9 @@ func (a *App) Run(ctx context.Context) {
 	a.healthMu.Lock()
 	a.started = time.Now()
 	a.heartbeats = map[string]time.Time{"monitor": time.Now()}
-	for i := 0; i < TransferWorkerLimit(); i++ {
-		a.heartbeats[fmt.Sprintf("transfer-%d", i)] = time.Now()
-	}
 	a.healthMu.Unlock()
-	for i := 0; i < TransferWorkerLimit(); i++ {
-		a.wg.Add(1)
-		go func(index int) { defer a.wg.Done(); a.transferWorker(ctx, index) }(i)
-	}
+	a.wg.Add(1)
+	go func() { defer a.wg.Done(); a.manageTransferWorkers(ctx) }()
 	a.wg.Add(1)
 	go func() { defer a.wg.Done(); a.manageScanWorkers(ctx) }()
 	a.wg.Add(1)

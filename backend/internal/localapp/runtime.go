@@ -39,10 +39,13 @@ func profileScanCapacity(profiles []json.RawMessage) int {
 // Resize admission workers without cancelling active scans. Retiring workers exit
 // between jobs; current per-profile admission limits also apply while they drain.
 func (a *App) manageScanWorkers(ctx context.Context) {
+	a.manageWorkers(ctx, "worker", a.ScanCapacity, func(ctx context.Context, name string, retire <-chan struct{}) { a.workerNamed(ctx, name, retire) })
+}
+func (a *App) manageWorkers(ctx context.Context, prefix string, capacity func() int, run func(context.Context, string, <-chan struct{})) {
 	workers := map[int]chan struct{}{}
 	next := 0
 	resize := func() {
-		target := a.ScanCapacity()
+		target := capacity()
 		for id, retire := range workers {
 			if len(workers) <= target {
 				break
@@ -53,12 +56,12 @@ func (a *App) manageScanWorkers(ctx context.Context) {
 		for len(workers) < target && ctx.Err() == nil {
 			id := next
 			next++
-			name := fmt.Sprintf("worker-%d", id)
+			name := fmt.Sprintf("%s-%d", prefix, id)
 			retire := make(chan struct{})
 			workers[id] = retire
 			a.beat(name)
 			a.wg.Add(1)
-			go func() { defer a.wg.Done(); defer a.stopBeat(name); a.workerNamed(ctx, name, retire) }()
+			go func() { defer a.wg.Done(); defer a.stopBeat(name); run(ctx, name, retire) }()
 		}
 	}
 	resize()
@@ -152,7 +155,7 @@ func EngineHealth(data string) map[string]any {
 func (a *App) PublishEngineHealth(ctx context.Context) {
 	publish := func() {
 		checks, healthy := a.liveStatus(ctx)
-		b, _ := json.Marshal(map[string]any{"healthy": healthy, "checks": checks, "observedAt": stamp(), "pid": os.Getpid(), "workerLimit": a.ScanCapacity()})
+		b, _ := json.Marshal(map[string]any{"healthy": healthy, "checks": checks, "observedAt": stamp(), "pid": os.Getpid(), "workerLimit": a.ScanCapacity(), "transferWorkerLimit": a.TransferCapacity()})
 		temp := filepath.Join(a.DataDir, "engine-health.next")
 		if os.WriteFile(temp, b, 0600) == nil {
 			_ = os.Rename(temp, filepath.Join(a.DataDir, "engine-health.json"))

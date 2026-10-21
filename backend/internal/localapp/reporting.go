@@ -36,7 +36,7 @@ func (a *App) statistics(w http.ResponseWriter, r *http.Request) {
 		}
 		counts[label] = countsTemp
 	}
-	respond(w, 200, map[string]any{"counts": counts, "scanErrors": scanErrors, "transferring": transferring, "pendingTransfers": pendingTransfers, "transferWorkerLimit": TransferWorkerLimit(), "scanningNow": scanningNow, "pendingScans": pendingScans, "observedAt": now.Format(time.RFC3339Nano), "note": "Pending scans counts queued or retry-waiting jobs awaiting scanning, excluding held files and transfers with a known verdict. Scanning now counts jobs in the scanning stage, including source download and waiting for the scanner. Queued jobs and destination transfers are excluded. Historical totals count distinct file-version jobs with a scanner response once. Rolling windows; month = 30 days. Older records use their last update time when no scan timestamp was recorded."})
+	respond(w, 200, map[string]any{"counts": counts, "scanErrors": scanErrors, "transferring": transferring, "pendingTransfers": pendingTransfers, "transferWorkerLimit": a.TransferCapacity(), "scanningNow": scanningNow, "pendingScans": pendingScans, "observedAt": now.Format(time.RFC3339Nano), "note": "Pending scans counts queued or retry-waiting jobs awaiting scanning, excluding held files and transfers with a known verdict. Scanning now counts jobs in the scanning stage, including source download and waiting for the scanner. Queued jobs and destination transfers are excluded. Historical totals count distinct file-version jobs with a scanner response once. Rolling windows; month = 30 days. Older records use their last update time when no scan timestamp was recorded."})
 }
 
 // Prevent spreadsheet programs from interpreting user-controlled fields as formulas.

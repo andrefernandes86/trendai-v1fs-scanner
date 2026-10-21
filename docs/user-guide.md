@@ -341,3 +341,12 @@ The sizing calculator starts with **12,000 files/day**, **1 GiB average files**,
 **Planned active files per host** is an editable load-distribution assumption, not a product limit. The estimated host count divides required active-file slots by that density. Each profile supports up to 32 scans, and multiple profiles can run on a host. CPU/RAM outputs are heuristic budgets, not measured or vendor-certified requirements; confirm them through a representative load test. Timing scales proportionally with average/reference file size, so replace the baseline when small-file overhead or archive processing changes that relationship.
 
 Delivered files belong to your downstream application. After the transfer checks, labels and source removal complete, this scanner does not automatically revisit them for recovery, historical enrichment or retention. Refresh in record details reloads saved history only. For another scan, submit a new source upload.
+
+
+### Ten concurrent small-file deliveries and checksum labels
+
+In **Scan profiles → Options → Transfer speed**, **Simultaneous transfers** supports 1–10. Files smaller than 1 GB (1,000,000,000 bytes) can occupy all ten slots. Files at or above 1 GB must also fit the separate large-transfer limit (1–2). Raising or lowering these limits takes effect for waiting jobs without restarting; current transfers finish normally. The overview shows active transfers separately from configured delivery capacity.
+
+![Transfer settings with ten delivery slots](images/transfer-speed.png)
+
+**Destination verification off** means no full destination-content readback. SHA-256 and CRC32C are still generated together during source download, without an extra disk pass. In technical records, `sourceChecksumAlgorithms` identifies them; `destinationVerification=false` and an empty `verifiedAt` show that no destination content comparison was performed. A nonzero `verify` duration records properties/size/identity checks, not necessarily hashing. The UI calls this timing **destination checks** and labels the CRC as **Source CRC32C**. The downstream application continues to own delivered-file lifecycle.

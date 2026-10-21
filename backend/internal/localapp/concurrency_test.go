@@ -3,6 +3,7 @@ package localapp
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -196,4 +197,48 @@ func TestWorkerPoolGrowsLiveBeyondEight(t *testing.T) {
 	p.SimultaneousScans = 3
 	_ = a.Save("profiles", p.ID, p)
 	wait(3)
+}
+
+func TestThirtyTwoScanCallsOverlap(t *testing.T) {
+	a, s, stores := reliabilityFixture(t)
+	s.Profile.SimultaneousScans = 32
+	_ = a.Save("profiles", s.Profile.ID, s.Profile)
+	a.transferEnabled = true
+	for i := 0; i < 32; i++ {
+		s.Key = fmt.Sprintf("parallel-%d", i)
+		if e := os.WriteFile(stores["source"].p(s.Key), []byte("123456789"), 0600); e != nil {
+			t.Fatal(e)
+		}
+		info, _ := stores["source"].Stat(s.Key)
+		s.ETag = infoTag(info)
+		if _, e := a.insertJob(s); e != nil {
+			t.Fatal(e)
+		}
+	}
+	entered := make(chan struct{}, 32)
+	release := make(chan struct{})
+	a.scanFn = func(ctx context.Context, _ string, _ Scanner, _ Profile) ([]byte, error) {
+		entered <- struct{}{}
+		select {
+		case <-release:
+			return []byte(`{"scanId":"parallel","scanResult":0}`), nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.wg.Add(1)
+	go func() { defer a.wg.Done(); a.manageScanWorkers(ctx) }()
+	defer func() { cancel(); a.wg.Wait() }()
+	timer := time.NewTimer(10 * time.Second)
+	defer timer.Stop()
+	for i := 0; i < 32; i++ {
+		select {
+		case <-entered:
+		case <-timer.C:
+			close(release)
+			t.Fatalf("only %d simultaneous calls entered", i)
+		}
+	}
+	close(release)
 }

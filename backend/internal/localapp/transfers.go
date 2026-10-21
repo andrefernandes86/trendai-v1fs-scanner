@@ -2,10 +2,10 @@ package localapp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 )
 
@@ -17,12 +17,28 @@ type transferTask struct {
 	Local, Digest, Verdict, Rule, Reason string
 }
 
-func TransferWorkerLimit() int {
-	n, _ := strconv.Atoi(os.Getenv("V1FS_TRANSFER_WORKERS"))
-	if n < 1 {
-		n = 4
+// Profile limits size the pool live; deployment environment cannot silently cap it.
+func (a *App) TransferCapacity() int {
+	profiles, err := a.List("profiles")
+	if err != nil {
+		return 2
 	}
-	return min(n, 8)
+	total := 0
+	for _, raw := range profiles {
+		var p Profile
+		if json.Unmarshal(raw, &p) == nil {
+			total += min(defaultInt(p.SimultaneousTransfers, 2), 10)
+		}
+	}
+	if total == 0 {
+		return 2
+	}
+	return total
+}
+func (a *App) manageTransferWorkers(ctx context.Context) {
+	a.manageWorkers(ctx, "transfer", a.TransferCapacity, func(ctx context.Context, name string, retire <-chan struct{}) {
+		a.transferWorkerNamed(ctx, name, retire)
+	})
 }
 func (a *App) enqueueTransfer(id string, s Snapshot, local, digest, verdict, rule, reason string) error {
 	payload, err := a.Seal(transferTask{s, local, digest, verdict, rule, reason})
@@ -43,6 +59,17 @@ func (a *App) enqueueTransfer(id string, s Snapshot, local, digest, verdict, rul
 	return tx.Commit()
 }
 func (a *App) claimTransfer() (string, transferTask, error) {
+	profiles, err := a.List("profiles")
+	if err != nil {
+		return "", transferTask{}, err
+	}
+	live := map[string]Profile{}
+	for _, raw := range profiles {
+		var p Profile
+		if json.Unmarshal(raw, &p) == nil {
+			live[p.ID] = p
+		}
+	}
 	var task transferTask
 	var id string
 	tx, err := a.DB.Begin()
@@ -76,11 +103,15 @@ func (a *App) claimTransfer() (string, transferTask, error) {
 		if err = a.Unseal(c.payload, &task); err != nil {
 			return "", task, err
 		}
+		limits := task.Snapshot.Profile
+		if p, ok := live[limits.ID]; ok {
+			limits = p
+		}
 		var active, large int
 		if err = tx.QueryRow("SELECT count(*),coalesce(sum(size>=1000000000),0) FROM transfer_queue WHERE active=1 AND profile_id=?", task.Snapshot.Profile.ID).Scan(&active, &large); err != nil {
 			return "", task, err
 		}
-		if active >= defaultInt(task.Snapshot.Profile.SimultaneousTransfers, 2) || task.Snapshot.Size >= 1000000000 && large >= defaultInt(task.Snapshot.Profile.LargeFileTransfers, 1) {
+		if active >= min(defaultInt(limits.SimultaneousTransfers, 2), 10) || task.Snapshot.Size >= 1000000000 && large >= min(defaultInt(limits.LargeFileTransfers, 1), 2) {
 			continue
 		}
 		id = c.id
@@ -100,8 +131,15 @@ func (a *App) claimTransfer() (string, transferTask, error) {
 	return id, task, tx.Commit()
 }
 func (a *App) transferWorker(ctx context.Context, index int) {
-	name := fmt.Sprintf("transfer-%d", index)
+	a.transferWorkerNamed(ctx, fmt.Sprintf("transfer-%d", index), nil)
+}
+func (a *App) transferWorkerNamed(ctx context.Context, name string, retire <-chan struct{}) {
 	for ctx.Err() == nil {
+		select {
+		case <-retire:
+			return
+		default:
+		}
 		a.beat(name)
 		id, task, err := a.claimTransfer()
 		if err != nil {

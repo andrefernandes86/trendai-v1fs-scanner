@@ -327,5 +327,12 @@ func (a *App) routeCapturedNow(ctx context.Context, id string, s Snapshot, local
 }
 
 func publicMove(m MoveRecord) map[string]any {
-	return map[string]any{"destinationVerification": !m.SkipDestinationVerification, "phase": m.Phase, "sha256": m.Digest, "crc32c": m.CRC32C, "sizeBytes": m.Size, "sourceETag": m.SourceETag, "destinationETag": m.DestinationETag, "verifiedAt": m.VerifiedAt, "matchedRule": m.Rule, "reason": m.Reason}
+	algorithms := []string{}
+	if m.Digest != "" {
+		algorithms = append(algorithms, "SHA-256")
+	}
+	if m.CRC32C != "" {
+		algorithms = append(algorithms, "CRC32C")
+	}
+	return map[string]any{"sourceChecksumAlgorithms": algorithms, "destinationVerification": !m.SkipDestinationVerification, "phase": m.Phase, "sha256": m.Digest, "crc32c": m.CRC32C, "sizeBytes": m.Size, "sourceETag": m.SourceETag, "destinationETag": m.DestinationETag, "verifiedAt": m.VerifiedAt, "matchedRule": m.Rule, "reason": m.Reason}
 }
