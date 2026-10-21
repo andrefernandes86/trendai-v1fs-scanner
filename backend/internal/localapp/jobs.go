@@ -218,7 +218,7 @@ func (a *App) claim() (string, Snapshot, int, error) {
 		if err := a.DB.QueryRow("SELECT count(*) FROM transfer_queue").Scan(&pending); err != nil {
 			return "", Snapshot{}, 0, err
 		}
-		if pending >= WorkerLimit()*2 {
+		if pending >= a.ScanCapacity()*2 {
 			return "", Snapshot{}, 0, errors.New("transfer backpressure")
 		}
 	}
@@ -235,7 +235,7 @@ func (a *App) claim() (string, Snapshot, int, error) {
 		if json.Unmarshal(raw, &p) == nil {
 			largeLimits += fmt.Sprintf(" WHEN '%s' THEN %d", strings.ReplaceAll(p.ID, "'", "''"), defaultInt(p.LargeFileScans, 1))
 			limits += " WHEN ? THEN ?"
-			parameters = append(parameters, p.ID, min(defaultInt(p.SimultaneousScans, 2), WorkerLimit()))
+			parameters = append(parameters, p.ID, min(defaultInt(p.SimultaneousScans, 2), 32))
 		}
 	}
 	limits += " ELSE 2 END"
@@ -284,8 +284,17 @@ func (a *App) claim() (string, Snapshot, int, error) {
 	return id, s, attempts + 1, nil
 }
 func (a *App) worker(ctx context.Context) { a.workerNamed(ctx, "worker-test") }
-func (a *App) workerNamed(ctx context.Context, name string) {
+func (a *App) workerNamed(ctx context.Context, name string, retirement ...<-chan struct{}) {
+	var retire <-chan struct{}
+	if len(retirement) > 0 {
+		retire = retirement[0]
+	}
 	for ctx.Err() == nil {
+		select {
+		case <-retire:
+			return
+		default:
+		}
 		a.beat(name)
 		id, s, attempt, e := a.claim()
 		if e != nil {

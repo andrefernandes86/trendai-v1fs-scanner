@@ -367,9 +367,6 @@ func (a *App) Run(ctx context.Context) {
 	a.healthMu.Lock()
 	a.started = time.Now()
 	a.heartbeats = map[string]time.Time{"monitor": time.Now()}
-	for i := 0; i < WorkerLimit(); i++ {
-		a.heartbeats[fmt.Sprintf("worker-%d", i)] = time.Now()
-	}
 	for i := 0; i < TransferWorkerLimit(); i++ {
 		a.heartbeats[fmt.Sprintf("transfer-%d", i)] = time.Now()
 	}
@@ -378,10 +375,8 @@ func (a *App) Run(ctx context.Context) {
 		a.wg.Add(1)
 		go func(index int) { defer a.wg.Done(); a.transferWorker(ctx, index) }(i)
 	}
-	for i := 0; i < WorkerLimit(); i++ {
-		a.wg.Add(1)
-		go func(index int) { defer a.wg.Done(); a.workerNamed(ctx, fmt.Sprintf("worker-%d", index)) }(i)
-	}
+	a.wg.Add(1)
+	go func() { defer a.wg.Done(); a.manageScanWorkers(ctx) }()
 	a.wg.Add(1)
 	go func() { defer a.wg.Done(); a.monitor(ctx) }()
 }

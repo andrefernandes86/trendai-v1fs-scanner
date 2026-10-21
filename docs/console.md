@@ -41,7 +41,7 @@ Profile sections 6–8 configure quiet periods/temporary ignores, retries, exclu
 
 ## Parallel processing
 
-Set **Files scanned at once** in the profile wizard's **Schedule** step (default 2, range 1–32). The shared engine has 8 worker slots by default; an operator can change V1FS_MAX_WORKERS (1–32). Scan slots cover download and scanning; separate transfer slots cover routing and finalization. Raising a limit releases eligible queued work; lowering it waits for existing active files. The console and engine are independent processes with independent watchdog recovery. Overview shows engine state, shared capacity, Pending scans and Scanning now. Profile edits reuse an existing active source-version job instead of enqueueing duplicates.
+Set **Files scanned at once** in the profile wizard's **Schedule** step (default 2, range 1–32). The engine follows the saved profile settings automatically, with no separate eight-worker cap. Overview shows the total configured scan capacity. Scan slots cover download and scanning; separate transfer slots cover routing and finalization. Raising a limit releases eligible queued work; lowering it waits for existing active files. The console and engine are independent processes with independent watchdog recovery. Overview shows engine state, shared capacity, Pending scans and Scanning now. Profile edits reuse an existing active source-version job instead of enqueueing duplicates.
 
 ## Complete file history
 

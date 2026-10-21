@@ -321,3 +321,11 @@ This applies to Azure Blob and share destinations. Scanning is unchanged. Existi
 ### ADLS Gen2 storage
 
 Select **Azure Data Lake Storage Gen2 (HTTPS)** when adding a storage connection. Enter your account, filesystem as the container name, and account key or SAS. The connection can be used as a source or result destination. See [ADLS Gen2 setup and protocol choices](adls-gen2.md) for HTTPS, NFS, DFS and SFTP details, result metadata and the PoC acceptance checklist.
+
+### Configure actual scan concurrency
+
+Open **Scan profiles → Edit profile → Schedule → Files scanned at once** and save. This is the actual maximum for that profile (1–32). Setting it to **20** allows up to **20** files in download/scanning together. There is no separate eight-worker engine limit. Each profile has its own budget, and the engine grows its worker pool automatically from the saved settings, including manual-only profiles.
+
+Changes apply live. Raising the value releases eligible queued work within about one second. Lowering it lets current scans finish and waits before admitting more. Overview's **Configured scan capacity** shows the total from saved profiles; **Scanning now** shows current activity. Large-file, archive, disk-capacity and transfer controls still apply to their respective stages.
+
+![Configured scan capacity follows saved profile settings](images/profile-concurrency.png)

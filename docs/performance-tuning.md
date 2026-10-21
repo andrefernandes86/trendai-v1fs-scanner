@@ -19,7 +19,7 @@ Scanning and destination transfer use separate, bounded worker pools. A long upl
 5. On **Overview**, watch **Scanning now**, **Pending scans**, **Transferring** and **Pending transfers**.
 6. Open a file's record and read **Processing time** before tuning. It shows queue wait, source download, scanning, transfer wait, upload and destination verification in seconds. Values accumulate across recorded attempts; older files may have no timings. The full CSV includes timings as JSON.
 
-The container defaults to eight scan workers and four transfer workers across all profiles. Set `V1FS_MAX_WORKERS` (1–32) and `V1FS_TRANSFER_WORKERS` (1–8) at deployment to change these shared limits. A profile limit cannot exceed the shared pool's actual capacity.
+Scan workers follow saved profile limits automatically (default 2, range 1–32 per profile). The pool grows or drains live; the legacy `V1FS_MAX_WORKERS` environment variable no longer overrides console settings. Transfer workers default to four across profiles, configurable using `V1FS_TRANSFER_WORKERS` (1–8). Large-file and archive limits and available disk capacity still control their respective stages.
 
 Increase one setting at a time. More upload requests consume approximately block size × requests × simultaneous transfers in buffer memory, plus SDK/runtime overhead. Network, storage throttling and scanner quotas may dominate throughput. This release does not establish a new 100 GB throughput benchmark.
 
@@ -35,7 +35,7 @@ SHA-256 and CRC32C are calculated together during source capture. Engine-owned c
 
 The transfer queue admission threshold is twice the global scan-worker count; in-flight scans may add up to one further worker count of handoffs before backpressure stops admission. Disk reservations and a 5 GiB reserve stop new captures when space is insufficient. Files remain at source while waiting; the queue does not silently drop work.
 
-Transfer handoffs are encrypted in SQLite. After engine restart, incomplete jobs return to the durable queue and temporary captures are discarded. The worker recaptures the unchanged source, reuses a persisted clean/malicious result, or resumes an existing move checkpoint. Destination verification is always repeated before deletion. Restart may add source-read work, but does not discard history or issue a clean verdict without evidence.
+Transfer handoffs are encrypted in SQLite. After engine restart, incomplete jobs return to the durable queue and temporary captures are discarded. The worker recaptures the unchanged source, reuses a persisted clean/malicious result, or resumes an existing move checkpoint. Destination size and identity checks are repeated before deletion; content readback also repeats when enabled in the profile. Restart may add source-read work, but does not discard history or issue a clean verdict without evidence.
 
 ## Remaining tuning work
 

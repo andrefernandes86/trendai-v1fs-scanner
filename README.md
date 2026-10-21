@@ -79,7 +79,7 @@ Run browser checks against an isolated instance with `PLAYWRIGHT_BROWSERS_PATH=/
 
 ## Container availability
 
-The image supervises the management API and processing engine independently. SDK calls use isolated child processes for safe parallel scanning. Configure Files scanned at once in each profile's Schedule step (default 2); the shared engine defaults to 8 worker slots, configurable with V1FS_MAX_WORKERS (1–32). Engine recovery leaves the console available. Docker handles container exit and host boot via `restart: unless-stopped`. `/livez` reports API/database liveness plus engine status; container health requires both services. External storage/scanner failures use normal processing retries. Share inputs are atomically claimed before scanning, and claimed ownership survives restart. External notifications remain deferred; customer-scale testing is owned by the customer.
+The image supervises the management API and processing engine independently. SDK calls use isolated child processes for safe parallel scanning. Configure Files scanned at once in each profile's Schedule step (default 2); the engine automatically sizes scan workers from saved profile settings (1–32 per profile). Profile settings apply live, with no separate environment override. Engine recovery leaves the console available. Docker handles container exit and host boot via `restart: unless-stopped`. `/livez` reports API/database liveness plus engine status; container health requires both services. External storage/scanner failures use normal processing retries. Share inputs are atomically claimed before scanning, and claimed ownership survives restart. External notifications remain deferred; customer-scale testing is owned by the customer.
 
 ### Performance validation
 

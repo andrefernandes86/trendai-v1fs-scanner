@@ -494,7 +494,7 @@ func (a *App) status(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		return result
-	}(), "observedAt": stamp(), "mode": "local-host", "engine": EngineHealth(a.DataDir), "workerLimit": WorkerLimit(), "scannerConfigured": func() bool { var s Scanner; return a.Get("scanner", "default", &s) == nil }()})
+	}(), "observedAt": stamp(), "mode": "local-host", "engine": EngineHealth(a.DataDir), "workerLimit": a.ScanCapacity(), "scannerConfigured": func() bool { var s Scanner; return a.Get("scanner", "default", &s) == nil }()})
 }
 func (a *App) audit(w http.ResponseWriter, r *http.Request) {
 	rows, e := a.DB.Query("SELECT id,at,action,object_id,detail FROM audit WHERE action!='authThrottle.saved' ORDER BY id DESC LIMIT 300")

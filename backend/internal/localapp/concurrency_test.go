@@ -2,6 +2,8 @@ package localapp
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -117,4 +119,81 @@ func TestProfileEditReusesActiveSourceVersion(t *testing.T) {
 	if e != nil || third == first {
 		t.Fatal("new source version must get its own job", e)
 	}
+}
+
+func TestProfileTwentyOverridesLegacyEightWorkerEnvironment(t *testing.T) {
+	t.Setenv("V1FS_MAX_WORKERS", "8")
+	a := testApp(t)
+	p := Profile{ID: "twenty", SimultaneousScans: 20}
+	if err := a.Save("profiles", p.ID, p); err != nil {
+		t.Fatal(err)
+	}
+	if a.ScanCapacity() != 20 {
+		t.Fatal("capacity does not follow profile", a.ScanCapacity())
+	}
+	for i := 0; i < 21; i++ {
+		if _, err := a.insertJob(Snapshot{Profile: p, Source: Mount{ID: "source"}, Key: fmt.Sprint(i), ETag: "v1"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 20; i++ {
+		if _, _, _, err := a.claim(); err != nil {
+			t.Fatalf("only admitted %d of 20: %v", i, err)
+		}
+	}
+	if _, _, _, err := a.claim(); err == nil {
+		t.Fatal("exceeded configured 20")
+	}
+	p.SimultaneousScans = 4
+	_ = a.Save("profiles", p.ID, p)
+	if a.ScanCapacity() != 4 {
+		t.Fatal("lower capacity not applied")
+	}
+	if _, _, _, err := a.claim(); err == nil {
+		t.Fatal("lowering admitted while old work active")
+	}
+	second := Profile{ID: "second", SimultaneousScans: 12}
+	_ = a.Save("profiles", second.ID, second)
+	if a.ScanCapacity() != 16 {
+		t.Fatal("profiles share an implicit cap", a.ScanCapacity())
+	}
+}
+
+func TestWorkerPoolGrowsLiveBeyondEight(t *testing.T) {
+	a := testApp(t)
+	p := Profile{ID: "p", SimultaneousScans: 2}
+	_ = a.Save("profiles", p.ID, p)
+	ctx, cancel := context.WithCancel(context.Background())
+	a.wg.Add(1)
+	go func() { defer a.wg.Done(); a.manageScanWorkers(ctx) }()
+	defer func() { cancel(); a.wg.Wait() }()
+	count := func() int {
+		a.healthMu.Lock()
+		defer a.healthMu.Unlock()
+		n := 0
+		for name := range a.heartbeats {
+			if strings.HasPrefix(name, "worker-") {
+				n++
+			}
+		}
+		return n
+	}
+	wait := func(want int) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if count() == want {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		t.Fatalf("workers=%d want=%d", count(), want)
+	}
+	wait(2)
+	p.SimultaneousScans = 20
+	_ = a.Save("profiles", p.ID, p)
+	wait(20)
+	p.SimultaneousScans = 3
+	_ = a.Save("profiles", p.ID, p)
+	wait(3)
 }

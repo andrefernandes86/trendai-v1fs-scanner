@@ -8,18 +8,70 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
 
-func WorkerLimit() int {
-	n, e := strconv.Atoi(os.Getenv("V1FS_MAX_WORKERS"))
-	if e != nil || n < 1 {
-		return 8
+// ScanCapacity is derived from saved profile settings, including manual profiles.
+// Deployment environment variables cannot silently override the console policy.
+func (a *App) ScanCapacity() int {
+	profiles, err := a.List("profiles")
+	if err != nil {
+		return 2
 	}
-	return min(n, 32)
+	return profileScanCapacity(profiles)
+}
+func profileScanCapacity(profiles []json.RawMessage) int {
+	total := 0
+	for _, raw := range profiles {
+		var p Profile
+		if json.Unmarshal(raw, &p) == nil {
+			total += min(defaultInt(p.SimultaneousScans, 2), 32)
+		}
+	}
+	if total == 0 {
+		return 2
+	}
+	return total
+}
+
+// Resize admission workers without cancelling active scans. Retiring workers exit
+// between jobs; current per-profile admission limits also apply while they drain.
+func (a *App) manageScanWorkers(ctx context.Context) {
+	workers := map[int]chan struct{}{}
+	next := 0
+	resize := func() {
+		target := a.ScanCapacity()
+		for id, retire := range workers {
+			if len(workers) <= target {
+				break
+			}
+			close(retire)
+			delete(workers, id)
+		}
+		for len(workers) < target && ctx.Err() == nil {
+			id := next
+			next++
+			name := fmt.Sprintf("worker-%d", id)
+			retire := make(chan struct{})
+			workers[id] = retire
+			a.beat(name)
+			a.wg.Add(1)
+			go func() { defer a.wg.Done(); defer a.stopBeat(name); a.workerNamed(ctx, name, retire) }()
+		}
+	}
+	resize()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			resize()
+		}
+	}
 }
 
 type ScanRequest struct {
@@ -100,7 +152,7 @@ func EngineHealth(data string) map[string]any {
 func (a *App) PublishEngineHealth(ctx context.Context) {
 	publish := func() {
 		checks, healthy := a.liveStatus(ctx)
-		b, _ := json.Marshal(map[string]any{"healthy": healthy, "checks": checks, "observedAt": stamp(), "pid": os.Getpid(), "workerLimit": WorkerLimit()})
+		b, _ := json.Marshal(map[string]any{"healthy": healthy, "checks": checks, "observedAt": stamp(), "pid": os.Getpid(), "workerLimit": a.ScanCapacity()})
 		temp := filepath.Join(a.DataDir, "engine-health.next")
 		if os.WriteFile(temp, b, 0600) == nil {
 			_ = os.Rename(temp, filepath.Join(a.DataDir, "engine-health.json"))
