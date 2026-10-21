@@ -289,9 +289,11 @@ Failed-file recovery reaffirms `scan-failed=true` when the result remains unknow
 
 ## Stop scanning a held file
 
-In **File activity**, choose **HELD** and click **Acknowledge — stop scanning** next to the file. Confirm the message. The state becomes **ACKNOWLEDGED** and automatic retries/recovery stop for this exact upload version. Its unknown/failure verdict, file, tags, error evidence and audit history remain. It is not promoted to Safe files. A new upload version is processed normally. Acknowledged records remain available through **All states** or **ACKNOWLEDGED**. Hiding a record is separate and does not stop processing. If recovery is running, wait for it to finish before acknowledging.
+In **Overview**, click **Review files** to open every held record, including hidden records. Click **Dismiss — stop retrying** beside a file, or open its details and use the same action. Confirm **Dismiss and stop retrying** in the in-app dialog. This is a local queue operation: it works when the file no longer exists, the connection was removed or credentials have expired.
 
-![Acknowledge a held file](images/held-acknowledge.png)
+The state becomes **ACKNOWLEDGED** and the record leaves the held count. Related held and queued recovery records are also dismissed so they cannot restart work or leave a held parent behind. Unknown/failure verdicts, tags, error evidence and audit history remain; no storage file is deleted or marked clean. A new upload version is processed normally. Find dismissed history using **All records → ACKNOWLEDGED**. Hiding is separate and does not stop processing. Active scans or transfers must finish before related records can be dismissed.
+
+![Dismiss a held or missing file](images/dismiss-held-file.png)
 
 ![Acknowledged file with scanning stopped](images/file-acknowledged.png)
 

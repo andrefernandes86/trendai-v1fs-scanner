@@ -43,7 +43,7 @@ func (a *App) assurance(w http.ResponseWriter, r *http.Request) {
 	var unresolved, unaccounted int
 	_ = a.DB.QueryRow("SELECT count(*) FROM jobs WHERE state='HELD'").Scan(&unresolved)
 	if unresolved > 0 {
-		alerts = append(alerts, map[string]any{"code": "HELD_FILES", "severity": "warning", "count": unresolved, "message": "Files are held for review. Open File activity, filter HELD, and inspect each error before retrying or recovering."})
+		alerts = append(alerts, map[string]any{"code": "HELD_FILES", "severity": "warning", "count": unresolved, "message": "Files are held for review. Review files to retry, recover, or dismiss records you no longer want processed."})
 	}
 	_ = a.DB.QueryRow("SELECT count(*) FROM inventory WHERE status IN ('DISCOVERED','ERROR')").Scan(&unaccounted)
 	var disk syscall.Statfs_t

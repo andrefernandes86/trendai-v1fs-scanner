@@ -1,7 +1,9 @@
 package localapp
 
 import (
+	"encoding/json"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
 
@@ -46,7 +48,7 @@ func TestAcknowledgeStopsThisVersionAndRecovery(t *testing.T) {
 	}
 }
 
-func TestAcknowledgeRejectsActiveRecovery(t *testing.T) {
+func TestAcknowledgeRejectsRunningButDismissesQueuedRecovery(t *testing.T) {
 	a, s, _ := reliabilityFixture(t)
 	id, _ := a.insertJob(s)
 	a.DB.Exec("UPDATE jobs SET state='HELD' WHERE id=?", id)
@@ -55,6 +57,7 @@ func TestAcknowledgeRejectsActiveRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	a.DB.Exec("UPDATE jobs SET state='SCANNING' WHERE id=?", child)
 	r := httptest.NewRequest("POST", "/", nil)
 	r.SetPathValue("id", id)
 	w := httptest.NewRecorder()
@@ -62,15 +65,54 @@ func TestAcknowledgeRejectsActiveRecovery(t *testing.T) {
 	if w.Code != 409 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	a.DB.Exec("UPDATE jobs SET state='HELD' WHERE id=?", child)
-	r.SetPathValue("id", child)
+	a.DB.Exec("UPDATE jobs SET state='QUEUED' WHERE id=?", child)
+	r.SetPathValue("id", id)
 	w = httptest.NewRecorder()
 	a.acknowledgeJob(w, r)
 	if w.Code != 200 {
 		t.Fatal(w.Code)
 	}
+	var remaining int
+	a.DB.QueryRow("SELECT count(*) FROM jobs WHERE id IN (?,?) AND state != 'ACKNOWLEDGED'", id, child).Scan(&remaining)
+	if remaining != 0 {
+		t.Fatal("related held/recovery records not dismissed")
+	}
 	s.ETag = "another-child"
 	if _, err := a.insertJob(s, id); err == nil {
 		t.Fatal("recovery restarted after child acknowledgement")
+	}
+}
+
+func TestDismissMissingHiddenFileClearsAssuranceWithoutStorage(t *testing.T) {
+	a, s, stores := reliabilityFixture(t)
+	if err := os.Remove(stores["source"].p(s.Key)); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := a.insertJob(s)
+	a.DB.Exec("UPDATE jobs SET state='HELD',verdict='UNKNOWN' WHERE id=?", id)
+	if _, err := a.DB.Exec("INSERT INTO hidden_jobs(job_id) VALUES(?)", id); err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest("POST", "/", nil)
+	r.SetPathValue("id", id)
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		a.acknowledgeJob(w, r)
+		if w.Code != 200 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	w := httptest.NewRecorder()
+	a.assurance(w, httptest.NewRequest("GET", "/", nil))
+	var result struct {
+		HeldFiles int `json:"heldFiles"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil || result.HeldFiles != 0 {
+		t.Fatal(w.Body.String(), err)
+	}
+	var state, verdict string
+	a.DB.QueryRow("SELECT state,verdict FROM jobs WHERE id=?", id).Scan(&state, &verdict)
+	if state != "ACKNOWLEDGED" || verdict != "UNKNOWN" {
+		t.Fatal(state, verdict)
 	}
 }

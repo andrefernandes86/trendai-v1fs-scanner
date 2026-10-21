@@ -66,7 +66,7 @@ A health check verifies application processes; it does not prove remote credenti
 
 ![Archive inspection controls](images/profile-archives.png)
 
-![Acknowledge a held file](images/held-acknowledge.png)
+![Dismiss a held or missing file](images/dismiss-held-file.png)
 
 ## 5. Troubleshoot and collect evidence
 
@@ -80,7 +80,7 @@ curl --fail http://localhost:8095/livez
 - Held/unknown: open record details and inspect scanner response, archive budgets and retry counts. Never assume an unknown file is clean.
 - Copy/tag error: check storage availability and read/write/tag permissions. The source remains until destination verification succeeds.
 - Slow processing: inspect scan and transfer queues, concurrency, disk and network; start with the sizing calculator and validate with measurements.
-- Stop work on a file: use **Acknowledge — stop scanning**. Hiding only changes the list display.
+- Stop work on a file: use **Dismiss — stop retrying**, then confirm in the in-app dialog. Missing files can be dismissed without accessing storage; related queued recoveries are stopped too. Hiding only changes the list display.
 
 Provide the tester's version (`git rev-parse HEAD`), redacted logs, record ID, file size/type, profile settings, measured timings and expected/actual result. Do not share API keys, storage credentials, the data volume, `master.key`, browser sessions or unredacted exports.
 
