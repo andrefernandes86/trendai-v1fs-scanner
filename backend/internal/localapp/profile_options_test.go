@@ -6,7 +6,7 @@ import (
 )
 
 func TestProfileIntervalAndResultTags(t *testing.T) {
-	for _, tc := range []struct{ n, want int }{{0, 30}, {1, 10}, {10, 10}, {65, 65}} {
+	for _, tc := range []struct{ n, want int }{{0, 30}, {1, 5}, {4, 5}, {5, 5}, {10, 10}, {65, 65}} {
 		if got := (Profile{ScanIntervalSeconds: tc.n}).Interval(); got != time.Duration(tc.want)*time.Second {
 			t.Fatalf("interval %d: %v", tc.n, got)
 		}

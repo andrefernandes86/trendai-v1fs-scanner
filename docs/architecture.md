@@ -29,7 +29,7 @@ SQLite stores encrypted configuration and immutable job snapshots (AES-256-GCM),
 
 ## Discovery and version ownership
 
-Connections support Azure Blob, Azure Files, SMB2/3 signing and NFSv3 TCP AUTH_SYS. They are application connections, not privileged OS mounts. Each profile monitors one source and routes to distinct, non-overlapping clean, malicious and scan-failed destinations. Intervals are 10–86400 seconds, default 30. Files must remain unchanged across observations for the configured quiet period. Stability cannot prove a producer will never resume writing.
+Connections support Azure Blob, Azure Files, SMB2/3 signing and NFSv3 TCP AUTH_SYS. They are application connections, not privileged OS mounts. Each profile monitors one source and routes to distinct, non-overlapping clean, malicious and scan-failed destinations. Intervals are 5–86400 seconds, default 30; 10 seconds is recommended. Files must remain unchanged across observations for the configured quiet period. Stability cannot prove a producer will never resume writing.
 
 An active source version has one job per profile even if that profile is edited while work is queued. Existing jobs retain their original encrypted policy. Newly observed source versions use the current revision. Connection root identity is checked when reusing an active job. Source-only reconciliation accounts for observed file versions; files removed before polling cannot be guaranteed.
 

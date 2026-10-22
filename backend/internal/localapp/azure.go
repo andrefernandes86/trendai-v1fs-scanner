@@ -375,7 +375,11 @@ func (a *App) ScanDirect(ctx context.Context, path string, s Scanner, p Profile)
 		return nil, e
 	}
 	defer c.Destroy()
-	raw, e := c.ScanFileWithContext(ctx, path, []string{"app:trendai-v1fs", "profile:" + p.ID})
+	tags, e := p.SDKTags()
+	if e != nil {
+		return nil, e
+	}
+	raw, e := c.ScanFileWithContext(ctx, path, tags)
 	return []byte(raw), e
 }
 

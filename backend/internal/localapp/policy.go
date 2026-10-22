@@ -66,6 +66,9 @@ func (p Profile) FilePolicy(key string, size int64) (string, string) {
 	return "scan", ""
 }
 func (p Profile) ReliabilityValidate() error {
+	if _, err := p.SDKTags(); err != nil {
+		return err
+	}
 	if p.UploadConcurrency < 0 || p.UploadConcurrency > 8 || (p.UploadBlockMiB != 0 && (p.UploadBlockMiB < 4 || p.UploadBlockMiB > 32)) || p.SimultaneousTransfers < 0 || p.SimultaneousTransfers > 10 || p.LargeFileTransfers < 0 || p.LargeFileTransfers > 2 {
 		return errors.New("Transfer limits: 1–10 total transfers, 1–8 upload requests, 4–32 MiB blocks, 1–2 large transfers (1 GB or more).")
 	}
@@ -113,4 +116,24 @@ func defaultInt(v, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+// SDKTags are scan-event labels sent to Vision One, distinct from storage tags.
+func (p Profile) SDKTags() ([]string, error) {
+	tags := []string{"app:trendai-v1fs", "profile:" + p.ID}
+	for _, tag := range strings.FieldsFunc(p.VisionOneTags, func(r rune) bool { return r == ',' || r == '\n' || r == '\r' }) {
+		tag = strings.TrimSpace(tag)
+		if tag != "" {
+			tags = append(tags, tag)
+		}
+	}
+	if len(tags) > 8 {
+		return nil, fmt.Errorf("Vision One accepts 8 tags total; add at most 6 custom tags alongside the 2 automatic tags.")
+	}
+	for _, tag := range tags {
+		if len(tag) > 63 {
+			return nil, fmt.Errorf("Each Vision One tag must fit within 63 bytes (63 ASCII characters).")
+		}
+	}
+	return tags, nil
 }

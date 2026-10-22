@@ -89,7 +89,7 @@ Choose one storage connection for each result: **Clean files**, **Malicious file
 
 ### Step 3 — Schedule
 
-Turn on **Scan new files automatically** to watch the source. Set **Check for new files every (seconds)** to a polling interval, for example **30**. Set **Files scanned at once** to the concurrency you want; **2** is the starting value. Leave automatic scanning off to start scans from Storage explorer yourself.
+Turn on **Scan new files automatically** to watch the source. Set **Check for new files every (seconds)** to **10 seconds (recommended)**, or as low as **5 seconds**. Set **Files scanned at once** to the concurrency you want; **2** is the starting value. Leave automatic scanning off to start scans from Storage explorer yourself.
 
 ![Wizard step 3: a focused schedule page](images/profile-schedule.png)
 
@@ -123,7 +123,7 @@ The defaults are ready to use. Open only the setting you want to customize:
 
 | Section | What it controls |
 | --- | --- |
-| Result tags | Extra `key=value` labels, such as `team=finance`. Scan status and verdict tags are automatic. |
+| Tags and labels | Vision One scan-event tags and separate storage-file labels. Scan status and verdict storage labels are automatic. |
 | Large-file handling | Scan size, large-file concurrency, timeout and the action for bigger files. Bypassed files are explicitly **NOT SCANNED**. |
 | Transfer speed | How many files are delivered together and Azure Blob upload tuning. |
 | Upload checks and retries | Quiet period, separate scan/copy/delete attempts, retry delay, temporary-file patterns and share ownership. |
@@ -381,3 +381,31 @@ Click **Scan errors** on Overview, then **Resubmit / move…** beside a held or 
 Confirm the action in the dialog. Moving manually does not certify a clean result: the file retains unknown/scan-failed labels and the original scan record remains unchanged. Manual delivery to Safe files can expose unscanned content to downstream applications. Missing or changed files stop with an error; use Dismiss to clear records for files that no longer exist.
 
 Delivered files remain owned by the downstream application. These buttons authorize access to one specific failed file only; there is no automatic destination-folder monitoring or recovery. Each requested action creates an audit entry linking the new job to the original record.
+
+## Vision One tags and storage labels
+
+Open **Scan profiles → Edit profile → Options → Tags and labels**.
+
+| Option | Where it appears | Format |
+| --- | --- | --- |
+| Custom Vision One tags | **Tags** column of Vision One File Security scan results and detections | Multiple text tags, one per line or comma-separated, for example `team:finance`, `application:uploads`. |
+| Storage labels for clean and malicious files | Delivered storage objects or their sidecars | Comma-separated `key=value` pairs, for example `team=finance,environment=production`. |
+| Additional storage labels for clean / malicious files | Added to the matching delivery result | Same `key=value` format. Verdict-specific labels override common labels, except reserved scan-result fields. |
+
+Vision One accepts **8 tags per scan**, each up to **63 bytes** in the Go SDK (63 ASCII characters). The app reserves two for `app:trendai-v1fs` and `profile:<profile-id>`, leaving **6 custom tags**. These describe the scan request; they are not malware names or verdicts. They are sent when the scan runs, not retroactively added to older Vision One results. See [Trend's Go SDK tag reference](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-pml-file-sec-sdk).
+
+Storage labels are separate: Azure Blob uses native blob index tags; ADLS Gen2 uses metadata for delivered files; Azure Files, SMB and NFS use JSON sidecar files. Azure Files has no native blob index tags. The app adds `scanned`, `verdict` and `scan-failed` according to the recorded outcome. These storage labels do not populate the Vision One Tags column.
+
+![Separate Vision One scan tags and storage file labels](images/profile-tags.png)
+
+## Container resources and service status
+
+The sidebar deployment card displays CPU allocation, memory usage/limit and data-disk used/total. CPU respects the container quota when available. **No limit** means no finite cgroup memory limit was found; it does not mean unlimited physical RAM. Disk figures cover the filesystem holding the data volume, which may be shared with other applications.
+
+**V1FS engine** uses its heartbeat. **SDK endpoint** reports a cached TCP/TLS connectivity check (up to 30 seconds old), not API-key authentication or a successful scan. Use **Vision One config → Test API key** for a real SDK validation. Service checks do not submit files or change storage.
+
+## Setup guide
+
+Use **Setup guide** in the top bar for the workflow diagram and the storage/scanner/profile checklist. They have moved off Overview, which focuses on current activity, counts and files needing attention.
+
+![Workflow and checklist in the separate setup guide](images/setup-guide.png)

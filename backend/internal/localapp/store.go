@@ -19,6 +19,10 @@ import (
 )
 
 type App struct {
+	serviceMu       sync.Mutex
+	serviceKey      string
+	serviceAt       time.Time
+	serviceCache    map[string]any
 	managementOnly  bool
 	transferEnabled bool
 	healthMu        sync.Mutex
@@ -92,6 +96,7 @@ type Profile struct {
 	FailedMount         string `json:"failedMount"`
 	FailedPrefix        string `json:"failedPrefix"`
 	ScanIntervalSeconds int    `json:"scanIntervalSeconds"`
+	VisionOneTags       string `json:"visionOneTags"`
 	ScannedTags         string `json:"scannedTags"`
 	CleanTags           string `json:"cleanTags"`
 	MaliciousTags       string `json:"maliciousTags"`

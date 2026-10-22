@@ -26,7 +26,7 @@ Latest maintenance: [code review, fixes and validation](docs/code-review-2026102
 
 Profiles support original-file SDK submission up to 100 GB with a size threshold, oversized hold/unscanned routing, large-file concurrency and per-attempt timeout. See [large-file policy](docs/poc-architecture.md#large-files-and-policy). Engine inspection limits remain applicable.
 
-Source, clean, malicious and scan-failed storage must be four distinct, non-overlapping roots. Automatic monitoring scans only the source, at a per-profile interval of 10–86400 seconds (default 30). It waits for unchanged identity across checks, at least 10 seconds apart. No completion marker is required. A paused upload can still appear stable.
+Source, clean, malicious and scan-failed storage must be four distinct, non-overlapping roots. Automatic monitoring scans only the source, at a per-profile interval of 5–86400 seconds (default 30; 10 recommended). It waits for unchanged identity across checks and the configured upload quiet period (10 seconds by default). No completion marker is required. A paused upload can still appear stable.
 
 Clean results go to clean storage, malicious results to malicious storage, and unknown/exhausted scanner failures to scan-failed storage for review. Transfers are read back and SHA-256 verified before the unchanged source is deleted. Delete failures are shown as held records with the verified destination retained. Blob deletion uses an ETag condition; SMB/NFS use identity and digest checks and do not offer the same atomic identity guarantee.
 

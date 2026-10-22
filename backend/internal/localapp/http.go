@@ -342,8 +342,8 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 	if p.ScanIntervalSeconds == 0 {
 		p.ScanIntervalSeconds = 30
 	}
-	if p.ScanIntervalSeconds < 10 || p.ScanIntervalSeconds > 86400 {
-		problem(w, 400, "Scan frequency must be between 10 and 86400 seconds.")
+	if p.ScanIntervalSeconds < 5 || p.ScanIntervalSeconds > 86400 {
+		problem(w, 400, "Scan frequency must be between 5 and 86400 seconds.")
 		return
 	}
 	if e := p.ReliabilityValidate(); e != nil {
@@ -538,7 +538,7 @@ func (a *App) status(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		return result
-	}(), "observedAt": stamp(), "mode": "local-host", "engine": EngineHealth(a.DataDir), "workerLimit": a.ScanCapacity(), "scannerConfigured": func() bool { var s Scanner; return a.Get("scanner", "default", &s) == nil }()})
+	}(), "observedAt": stamp(), "mode": "local-host", "resources": containerResources(a.DataDir), "scannerService": a.scannerConnection(r.Context()), "engine": EngineHealth(a.DataDir), "workerLimit": a.ScanCapacity(), "scannerConfigured": func() bool { var s Scanner; return a.Get("scanner", "default", &s) == nil }()})
 }
 func (a *App) audit(w http.ResponseWriter, r *http.Request) {
 	rows, e := a.DB.Query("SELECT id,at,action,object_id,detail FROM audit WHERE action!='authThrottle.saved' ORDER BY id DESC LIMIT 300")
