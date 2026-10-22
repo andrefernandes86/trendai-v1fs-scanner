@@ -97,11 +97,25 @@ The tool checks that uploads have settled before admitting them. **How schedulin
 
 ### Step 4 — Protection
 
-Choose **Detect suspicious files** and **Detect active content** according to your security policy. Open **Scan report preferences** for detailed responses, scanner file hashes and SPN feedback.
+Choose **Predictive Machine Learning** and **Active Content Detection** according to your security policy. Open **Scan report preferences** for detailed responses, scanner file hashes and SPN feedback.
 
-For archives, enable **archive extraction and member scans**. Open **Archive settings** to adjust nesting, count, size, ratio and time budgets. See [archive inspection](archive-inspection.md) for format and protection details.
+The SDK scans ZIP contents automatically. **Additional archive inspection** is optional and off by default. Enable it for local extraction and per-file results; the main controls are entry count and total unpacked size. Other controls stay under **Advanced archive limits**. See [archive inspection](archive-inspection.md) for details.
 
 ![Wizard step 4: detection and archive choices](images/profile-protection.png)
+
+### Active Content Detection explained
+
+Active content consists of file elements that can execute code or trigger actions. It can serve legitimate purposes, but attackers can also use it to deliver harmful behavior. Trend documents this feature in [Use the SDK](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-using-sdk), through the `-active-content` option, and [Deploy with CLI](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-deploying-cli), through `--activeContent`. The [File Security SDK overview](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-sdk-or-cli-scanning) also lists this capability.
+
+In this tool:
+
+- Open **Scan profiles → Edit profile → Protection → Active Content Detection** to enable or disable it. New profiles start with it enabled.
+- The saved profile option is passed to the official Go SDK as `WithActiveContent(true)`. Turning it off disables that optional check; the normal malware scan still runs.
+- Open **File activity → file → Show scanner response** to inspect the engine's returned active-content information, such as `result.atse.activeContentCount` when present. Active-content information is not a separate entry in the Malware detections list.
+- Finding active content alone does **not** automatically mean the file is malware. This app bases routing on the normalized malware verdict and scan-completion/error checks. It currently has no separate “quarantine every file containing active content” rule.
+- This is detection, not sanitization: the tool does not remove macros, rewrite documents, or strip scripts. The original file bytes are routed unchanged.
+
+**Predictive Machine Learning** is a separate SDK option for machine-learning-based threat detection. It does not replace Active Content Detection; both can be enabled together.
 
 ### Step 5 — Options
 
@@ -239,7 +253,7 @@ An SDK verdict does not prove every byte/member was inspected. Scanner inspectio
 
 ## Inspect compressed files
 
-In **Scan profiles → Edit profile → Protection → Archive scanning**, enable extraction and member scans, then set a nesting limit from **1 to 20 layers**, file count, total/member expanded sizes, expansion ratio, extraction time and concurrency. Defaults are off / 5 layers / 1,000 entries / 10 GB total / 2 GB per member / 100× / 300 seconds / one inspection. Unsupported, encrypted, corrupt or over-budget archives never qualify as clean. The original and every extracted member must scan successfully before clean routing. [Step-by-step behavior, protections and testing](archive-inspection.md).
+In **Scan profiles → Edit profile → Protection → Additional archive inspection**, optionally enable local extraction and per-file results. The main settings are maximum entries and total expanded size; remaining limits are under **Advanced archive limits**. Defaults are off / 10 entries / 10 GB total; advanced defaults are 5 layers / 2 GB per member / 100× / 300 seconds / one inspection. Unsupported, encrypted, corrupt or over-budget archives never qualify as clean. The original and every extracted member must scan successfully before clean routing. [Step-by-step behavior, protections and testing](archive-inspection.md).
 
 ## Choose light or dark mode
 

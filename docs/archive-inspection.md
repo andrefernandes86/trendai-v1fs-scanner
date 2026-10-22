@@ -2,7 +2,7 @@
 
 ## Enable and configure
 
-Open **Scan profiles → Edit profile → Protection → Archive scanning** and select **Enable archive extraction and member scans**. Open **Archive settings** to set its budgets. The option defaults to off for both new and existing profiles. Changes apply to newly queued job snapshots; existing queued/held work retains its original policy. Use a separate test profile or linked recovery with the current policy to validate new settings.
+The SDK scans ZIP contents through the normal scan path without local extraction. For optional per-file inspection, open **Scan profiles → Edit profile → Protection → Additional archive inspection** and select **Enable additional archive inspection**. Entry count and total expanded size are the main controls; open **Advanced archive limits** for the remaining budgets. The option defaults to off for both new and existing profiles. Changes apply to newly queued job snapshots; existing queued/held work retains its original policy. Use a separate test profile or explicit resubmission to validate new settings.
 
 Supported extraction formats are ZIP/ZIP64 (stored/deflate methods), TAR and GZIP, including nested combinations. ZIP-based documents and packages are recognized by signature or supported extension. RAR, 7z, BZIP2, XZ, Zstandard, CAB and ISO are not extracted by this release. Detected unsupported archives fail closed when this option is enabled. With the option off, the original file continues through the normal SDK scan path.
 
@@ -27,8 +27,8 @@ The extraction helper inventories and hashes supported members in a private work
 Member exclusions and oversized-to-clean bypass rules do not apply inside archive inspection. A member above its extraction limit blocks completion rather than silently bypassing scanning.
 
 - **CLEAN:** extraction completed within policy and all required scans returned clean.
-- **MALICIOUS:** at least one required file scan returned malicious. A malicious finding is retained even if another member could not be verified.
-- **UNKNOWN:** extraction failed, a limit was exceeded, encryption/unsupported content was encountered, or any required scan remained unknown without a malicious finding.
+- **MALICIOUS:** at least one required file scan returned malicious. Complete inspection routes malicious results to quarantine. Detections remain in evidence if coverage is incomplete; incomplete coverage is retried and ultimately routed as UNKNOWN to Scan failed.
+- **UNKNOWN:** extraction failed, a limit was exceeded, encryption/unsupported content was encountered, or any required scan remained unknown or coverage was incomplete.
 
 An engine error on the original archive is not ignored because member scans are clean. In particular, application-side extraction does not override the previously observed VPLE.zip ATSE -82 error. Successful SDK submission and complete engine inspection are distinct.
 
@@ -67,4 +67,4 @@ References: [Go ZIP format support and ZIP64 fields](https://pkg.go.dev/archive/
 
 **Maximum size per extracted file (GB)** limits each individual unpacked file, rather than the original compressed archive. For example, 2 GB permits each extracted file to be up to 2 GB; all extracted content must also fit the shared total expanded-size budget. A file exceeding either budget makes inspection incomplete and follows scan-failed handling.
 
-Result tags automatically include `scan-failed=true` and `scanned=false` for incomplete archive inspections or unknown scans routed after exhausted retries. Incomplete archives with detected malware retain their malicious verdict and quarantine routing. Complete clean/malicious scans receive `scan-failed=false`. Azure Blob stores native tags; shares store JSON sidecars. Existing destination objects are not retroactively retagged.
+Result tags automatically include `scan-failed=true` and `scanned=false` for incomplete archive inspections or unknown scans routed after exhausted retries. Incomplete archive coverage is retried and ultimately routed as UNKNOWN to Scan failed, with detected malware retained in the recorded evidence. Complete clean/malicious scans receive `scan-failed=false`. Azure Blob stores native tags; shares store JSON sidecars. Existing destination objects are not retroactively retagged.

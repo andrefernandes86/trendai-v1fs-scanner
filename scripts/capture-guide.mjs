@@ -26,7 +26,7 @@ try{
  await step('Destinations');await dialogShot('profile-destinations.png');
  await step('Schedule');await dialogShot('profile-schedule.png');
  await step('Protection');await dialogShot('profile-protection.png');
- await page.getByLabel('Enable archive extraction and member scans',{exact:false}).check();await page.getByText('Archive settings',{exact:true}).click();await page.getByLabel('Maximum archive layers',{exact:false}).fill('20');await page.getByLabel('Maximum archive layers',{exact:false}).blur();await page.getByRole('heading',{name:'Archive scanning',exact:true}).locator('..').screenshot({path:new URL('profile-archives.png',output).pathname});
+ await page.getByText('Additional archive inspection',{exact:true}).click();await page.getByLabel('Enable additional archive inspection',{exact:false}).check();await page.getByText('Advanced archive limits',{exact:true}).click();await page.getByLabel('Maximum archive layers',{exact:false}).fill('20');await page.getByLabel('Maximum archive layers',{exact:false}).blur();await page.locator('details.profile-option-group').filter({has:page.locator('summary',{hasText:/^Additional archive inspection$/})}).screenshot({path:new URL('profile-archives.png',output).pathname});
  await step('Options');await dialogShot('profile-options.png');await page.getByText('Large-file handling',{exact:true}).click();await page.locator('details.profile-option-group').filter({has:page.locator('summary',{hasText:'Large-file handling'})}).screenshot({path:new URL('profile-large-files.png',output).pathname});
  await step('Review');await dialogShot('profile-review.png');await page.getByRole('button',{name:'Cancel',exact:true}).click();
  // Synthetic illustrative activity records; no real storage files or credentials are used.
