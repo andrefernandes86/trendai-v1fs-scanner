@@ -262,6 +262,7 @@ CREATE INDEX IF NOT EXISTS jobs_history_page ON jobs(created_at DESC,id DESC);
 CREATE INDEX IF NOT EXISTS jobs_newer_completed ON jobs(source_id,key,profile_id,created_at DESC) WHERE state IN ('COMPLETED','QUARANTINED');
 CREATE INDEX IF NOT EXISTS jobs_active_version ON jobs(profile_id,source_id,key,etag,version) WHERE state IN ('QUEUED','SCANNING','ROUTING','RETRY_PENDING');
 CREATE INDEX IF NOT EXISTS jobs_active_profile ON jobs(profile_id,state);
+CREATE INDEX IF NOT EXISTS jobs_inventory_identity ON jobs(profile_id,key,created_at DESC);
 CREATE TABLE IF NOT EXISTS observations(profile_id TEXT NOT NULL,key TEXT NOT NULL,etag TEXT NOT NULL,first_seen INTEGER NOT NULL,PRIMARY KEY(profile_id,key));`)
 	if e != nil {
 		db.Close()
