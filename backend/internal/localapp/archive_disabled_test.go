@@ -20,9 +20,9 @@ func TestDisabledLocalArchiveStillScansOriginalZIP(t *testing.T) {
 		t.Fatal("feature availability must disable extraction while retaining its settings")
 	}
 	calls := 0
-	a.scanFn = func(_ context.Context, file string, _ Scanner, policy Profile) ([]byte, error) {
+	a.scanFn = func(ctx context.Context, file string, _ Scanner, policy Profile) ([]byte, error) {
 		calls++
-		if file != local || policy.Archive.Enabled {
+		if file != local || policy.Archive.Enabled || scanIdentifier(ctx, file) != "original.zip" {
 			t.Fatal("SDK did not receive original archive with local extraction off")
 		}
 		return []byte(`{"scanId":"sdk","scanResult":1}`), nil

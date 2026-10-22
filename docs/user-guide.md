@@ -443,3 +443,5 @@ A longer wait reduces early pickup after a temporary upload pause but does not e
 **Confirm exclusive file-share writes during delivery** applies only to Azure Files, SMB or NFS destinations. Enable it only when no other application can overwrite, rename or delete the file until delivery and source cleanup finish. Otherwise leave it off; share delivery is held. Blob/ADLS Gen2 use leases and do not require this confirmation. Downstream lifecycle management is permitted after handoff.
 
 ![Upload wait and retry settings](images/upload-checks-retries.png)
+
+New scans report the original source filename/key in Vision One, including its folder prefix, instead of the scanner’s private `/data/captures/scan-*` path. The SDK reads the captured bytes through its reader interface. Historical Vision One entries retain their original reported filename.

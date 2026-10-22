@@ -36,6 +36,14 @@ The Overview, File activity and Audit log pages offer browser-persisted auto-ref
 
 Overview shows Pending scans, Scanning now and rolling minute/hour/day/30-day counts. CSV export includes the entire job history; the activity view offers full-history search, matching totals, first/last/page navigation and 100–1000 rows per page. See [console usage](docs/console.md) and [pending work](to-do.md).
 
+## Deploy with data kept on the host
+
+Published image: `ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest` (Linux amd64).
+
+Follow the [container deployment guide](docs/operations.md#container-first-host-deployment). It includes complete Docker `-v /srv/trendai-v1fs-data:/data` and Compose commands, UID/GID permissions, health checks, upgrades, backup and restore.
+
+**Keep the same host data directory for every upgrade.** It contains the encrypted database and its matching `master.key`, saved settings, queue and history. Replacing the container retains this state only when the same persistent data is mounted. Do not run two instances against the same directory.
+
 ## Run directly
 
 ```
@@ -49,7 +57,7 @@ V1FS_DATA_DIR=./data V1FS_WEB_DIR=./dist PORT=8095 ./scanner
 
 Open `http://HOST_IP:8095`. Use the host IP or localhost; arbitrary Host headers are rejected. The server can terminate HTTPS directly with V1FS_TLS_CERT and V1FS_TLS_KEY. Configure HTTPS before using this console across untrusted networks.
 
-Alternatively run `docker compose up -d --build`; the persistent `scanner-data` volume contains the encrypted database and encryption key. Back up both together. An initialized database without its key is rejected.
+For containers, use the [explicit host-directory deployment](docs/operations.md#container-first-host-deployment). Plain `docker compose up -d --build` uses a Docker-managed named volume instead of your selected host path.
 
 ## Verify
 

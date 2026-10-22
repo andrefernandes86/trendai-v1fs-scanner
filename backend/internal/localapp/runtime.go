@@ -78,9 +78,10 @@ func (a *App) manageWorkers(ctx context.Context, prefix string, capacity func() 
 }
 
 type ScanRequest struct {
-	Path    string
-	Scanner Scanner
-	Profile Profile
+	Identifier string
+	Path       string
+	Scanner    Scanner
+	Profile    Profile
 }
 type ScanReply struct {
 	Response []byte
@@ -92,7 +93,7 @@ func scanSubprocess(ctx context.Context, path string, s Scanner, p Profile) ([]b
 	if e != nil {
 		return nil, e
 	}
-	input, e := json.Marshal(ScanRequest{path, s, p})
+	input, e := json.Marshal(ScanRequest{Path: path, Identifier: scanIdentifier(ctx, path), Scanner: s, Profile: p})
 	if e != nil {
 		return nil, e
 	}

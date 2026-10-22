@@ -25,6 +25,7 @@ func runIsolatedScan() {
 	defer stop()
 	ctx, cancel := context.WithTimeout(ctx, request.Profile.JobTimeout())
 	defer cancel()
+	ctx = localapp.WithScanIdentifier(ctx, request.Identifier)
 	response, err := (&localapp.App{}).ScanDirect(ctx, request.Path, request.Scanner, request.Profile)
 	result := localapp.ScanReply{Response: response}
 	if err != nil {

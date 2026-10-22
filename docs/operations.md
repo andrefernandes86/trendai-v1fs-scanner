@@ -23,50 +23,159 @@ Generated safe/EICAR test files enter the configured source and use the real mon
 
 Existing unknown files created before the verbose TrendX parsing fix are historical results. Re-upload a copy to the source to scan under the fixed logic; delivered files are not rescanned in place. Record refresh reloads saved history only. Do not label old unknown records clean without rescanning their exact bytes.
 
-## Deploy on the current host
+## Container-first host deployment
 
-Example console address: **http://scanner-host:8095**. Replace the example hostname and `/srv` paths below with your deployment values. Container: `trendai-v1fs-scanner-1`. Repository: `/srv/trendai-v1fs-scanner`.
+Use a Linux host with Docker Engine, Docker Compose, outbound access to the configured storage/scanner, and enough free disk for active file captures. Run the commands below on the Docker host. Enable Docker at boot with `sudo systemctl enable --now docker` on a systemd host.
 
-From that repository, preserve the existing database and key by using the host override:
+**Recommended: bind `/data` to an absolute host directory.** Everything needed to retain settings and work belongs in this directory: the encrypted SQLite database, `master.key`, queue/history, transfer evidence and temporary captures. Removing or replacing the container must not replace this directory.
+
+### 1. Pull the published image
+
+The published image targets **Linux amd64**. On an amd64 Docker host:
+
+```bash
+docker pull ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest
+```
+
+`latest` is the current release. For a fixed version, use `ghcr.io/andrefernandes86/trendai-v1fs-scanner:sha-FULL_COMMIT_SHA` instead. Every publication has a commit-specific tag.
+
+To build from source instead:
+
+```bash
+git clone https://github.com/andrefernandes86/trendai-v1fs-scanner.git
+cd trendai-v1fs-scanner
+docker build -t ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest .
+```
+
+### 2. Create the host data directory — new installation only
+
+```bash
+sudo install -d -m 0700 -o 65532 -g 65532 /srv/trendai-v1fs-data
+```
+
+This directory must be on a persistent filesystem with sufficient free space. The example runs the scanner as UID/GID `65532:65532`. For an **existing installation**, keep its existing directory and owner; do not create an empty replacement or change ownership blindly.
+
+### 3. Start with Docker and an explicit host mount
+
+```bash
+docker run -d \
+  --name trendai-v1fs-scanner \
+  --restart unless-stopped \
+  --init \
+  --stop-timeout 40 \
+  --user 65532:65532 \
+  --read-only \
+  --tmpfs /tmp:size=512m,mode=1777 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  -p 8095:8095 \
+  -e PORT=8095 \
+  -e V1FS_DATA_DIR=/data \
+  -e V1FS_WEB_DIR=/app/dist \
+  -v /srv/trendai-v1fs-data:/data \
+  ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest
+```
+
+Open `http://HOST_IP:8095`, create your own administrator password, then configure storage, Vision One and a scan profile. Use HTTPS through a reverse proxy or the optional TLS parameters below before administering credentials across an untrusted network.
+
+| Parameter | Meaning / value to change |
+|---|---|
+| `-v /srv/trendai-v1fs-data:/data` | Left side is the **persistent directory on the host**. Right side is the application's directory inside the container. Change only the left side when choosing a different host location. |
+| `-e V1FS_DATA_DIR=/data` | Must match the right side of the data mount. Keep `/data` for these examples. |
+| `--user 65532:65532` | Must match the UID/GID owning the host directory. For existing data, use `stat -c '%u:%g' /path/to/existing-data`. |
+| `-p 8095:8095` | Host port is on the left. For host port 8096, use `-p 8096:8095`; keep `PORT=8095` inside the container. |
+| `--restart unless-stopped` | Restart on failure and host reboot when Docker starts; an explicitly stopped container stays stopped. |
+| `--read-only`, `--tmpfs /tmp:...` | Keep the container filesystem read-only while providing writable temporary space. Persistent writes go to the mounted `/data`. |
+| `--name trendai-v1fs-scanner` | Name used by the Docker run health, backup and upgrade commands below. |
+
+The data mount does **not** mount Azure, SMB or NFS destinations. Configure those remote connections in the console; they use their network connectors. Do not put unrelated customer uploads or backups inside `/data/captures`; that workspace is cleaned by the engine.
+
+Optional direct HTTPS: add these parameters to the same `docker run` command. Certificate files must be readable by the selected container UID.
+
+```bash
+-v /srv/trendai-v1fs-tls:/tls:ro \
+-e V1FS_TLS_CERT=/tls/server.crt \
+-e V1FS_TLS_KEY=/tls/server.key
+```
+
+Then use `https://HOST_IP:8095` with a certificate valid for the hostname/IP you use. Do not copy private keys into the image or repository.
+
+### Compose alternative — use instead of Docker run
+
+Run this from the repository directory. It uses the **same host directory**, not the default named volume. Docker Compose must support the `!override` volume syntax in `compose.host.yaml`.
 
 ```bash
 export V1FS_HOST_DATA_DIR=/srv/trendai-v1fs-data
-docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml up -d --build
-docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml ps
-docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml logs --tail 100 scanner
+export SCANNER_UID=65532
+export SCANNER_GID=65532
+docker pull ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest
+docker tag ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest trendai-v1fs-scanner:current
+docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml config
+docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml up -d --no-build
+```
+
+The rendered configuration must show a bind mount with `source: /srv/trendai-v1fs-data` and `target: /data`. Re-export these variables in a new shell before running Compose commands. The Compose container is named `trendai-v1fs-scanner-1`; it is different from the Docker run name above. **Do not run both deployments against the same data or source folders.**
+
+Without `compose.host.yaml`, `docker compose -p trendai-v1fs up -d --build` uses the Docker-managed `scanner-data` named volume instead. That is persistent but does not use your chosen `/srv` directory. Do not switch between these methods on an existing installation without migrating the entire data directory and its ownership while the scanner is stopped.
+
+### 4. Verify the data mount and service
+
+For the Docker run deployment:
+
+```bash
+docker inspect trendai-v1fs-scanner --format '{{range .Mounts}}{{println .Type .Source "->" .Destination}}{{end}}'
+docker exec trendai-v1fs-scanner /app/scanner -healthcheck
+docker logs --tail 100 trendai-v1fs-scanner
 curl --fail http://127.0.0.1:8095/livez
 ```
 
-For an upgrade, first keep a coordinated data/key backup and record the prior image ID. Rebuild and recreate using the same command and data path. Do not remove the data mount or run `down -v`. Sign in after deployment, confirm saved connections and profiles, and verify safe/EICAR routing. Health alone does not validate remote credentials. Roll back by restoring the prior image and recreating the same service; restore a coordinated backup only when a schema downgrade requires it. Preserve failed-state evidence before restoring.
+Confirm the inspection output contains `bind /srv/trendai-v1fs-data -> /data`. For Compose, substitute `trendai-v1fs-scanner-1` in these commands. Use HTTPS and the configured port if you changed them. Health checks validate the local API/engine, not remote credentials; use the console storage/scanner tests and then a safe/EICAR routing test.
 
-The direct-binary and optional `deploy/` systemd files are alternatives for other installations, not the current host deployment. Never run both alongside the container on the same port/data directory.
+### 5. Upgrade without losing settings or history
 
-## Container-first host deployment
+1. Wait for active scans/transfers to finish, then stop the scanner. Use the backup procedure below before replacing its image.
+2. Record the running image for rollback: `docker tag "$(docker inspect --format '{{.Image}}' trendai-v1fs-scanner)" trendai-v1fs-scanner:previous`. For Compose, use the container name `trendai-v1fs-scanner-1`.
+3. Pull the new release with `docker pull ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest`. For a source build, pull the source and rebuild the same image tag.
+4. For Docker run: remove only the stopped container with `docker rm trendai-v1fs-scanner`, then repeat the full Docker run command above with the **same host path and UID/GID**.
+5. For Compose: export the same host path/UID/GID, retag the pulled image as `trendai-v1fs-scanner:current`, then run the same two-file `up -d --no-build` command. This recreates the service while retaining its bind mount.
+6. Sign in with the existing administrator password. Confirm that saved connections, profiles and history remain. Run the health check.
 
-The container independently supervises the management API and processing engine, with isolated SDK child processes for concurrent scanning. Use the normal named volume for a new deployment:
+Never use `docker compose down -v` as an upgrade step. Never delete the host data directory, `master.key`, SQLite files or transfer/claim evidence to repair a startup error. To roll back the image, tag `trendai-v1fs-scanner:previous` as `ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest` (and as `trendai-v1fs-scanner:current` for Compose), then recreate with the same data mount without pulling again. Restore a coordinated backup only if a database schema downgrade requires it.
+
+### Backup and restore — keep the database and key together
+
+These commands are for the Docker run deployment. For Compose, substitute `trendai-v1fs-scanner-1` in stop/start commands. Backups contain credentials and must remain private.
 
 ```bash
-docker compose up -d --build
-docker compose ps
-docker compose logs --tail 100 scanner
+sudo install -d -m 0700 /srv/trendai-v1fs-backups
+docker stop trendai-v1fs-scanner
+sudo sh -c 'umask 077; tar -C /srv -czpf "/srv/trendai-v1fs-backups/scanner-$(date +%Y%m%d-%H%M%S).tar.gz" trendai-v1fs-data'
+docker start trendai-v1fs-scanner
 ```
 
-To retain the current host's existing encrypted state, use the host override (the scanner runs as UID/GID 1000, matching its existing data ownership):
+The stopped-service archive includes the entire data directory, including SQLite/WAL files and `master.key`, and preserves ownership. Copy the archive to your protected backup storage. A database backup without the matching key cannot decrypt the saved configuration.
+
+To restore, stop the scanner, preserve the current data directory separately, and extract the chosen archive under `/srv` with `sudo tar -xzpf BACKUP.tar.gz -C /srv`. Verify the restored directory owner matches the container UID/GID before starting. Restore into an empty target location; do not overlay a live or partly restored database. Start with the same mount and sign in with the credentials from that backup.
+
+## Deploy on the current host
+
+For an existing deployment, use its **actual existing** host data path and owner, not the new-installation example values. In the repository:
 
 ```bash
-export V1FS_HOST_DATA_DIR=/srv/trendai-v1fs-data
+export V1FS_HOST_DATA_DIR=/absolute/path/to/existing/scanner-data
+export SCANNER_UID=$(stat -c '%u' "$V1FS_HOST_DATA_DIR")
+export SCANNER_GID=$(stat -c '%g' "$V1FS_HOST_DATA_DIR")
+docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml config
 docker compose -p trendai-v1fs -f compose.yaml -f compose.host.yaml up -d --build
 ```
 
-Stop a previous foreground scanner before starting the container so port 8095 and the data lock are free. Do not run both against the same data. Inspect health with `docker compose ps` and `/livez`; verify actual safe/EICAR routing separately. Keep the persistent data mount through rebuilds; never use `down -v` as an upgrade step. Docker must be enabled at host boot; it is enabled on the current host. The earlier systemd application unit is optional for a direct binary deployment, not required for the container.
+A fresh setup screen where an existing login is expected means the wrong or empty data directory was mounted. Stop the new container and correct the mount; do not initialize another administrator over the wrong state. Do not start a direct binary or systemd service alongside the container against the same data.
 
-Set **Schedule → Files scanned at once** in each profile (1–32). This saved value controls actual scan admission, and worker capacity grows or drains automatically without a restart. The engine no longer uses `V1FS_MAX_WORKERS`; remove it from older deployment files. Overview reports the total from saved profile settings. Lowering a value lets active jobs finish; raising it releases eligible queued work. Downloads and scans use these slots; transfers use their own pool. Large-file, archive and disk controls remain separate.
+## Runtime controls
 
-The watchdog uses 20 seconds of startup grace, 5-second checks and 3 failed checks before restart. Optional V1FS_WATCHDOG_STARTUP_SECONDS and V1FS_WATCHDOG_INTERVAL_SECONDS settings can be used in controlled tests. A child gets SIGTERM and up to ten seconds before SIGKILL. Docker stop_grace_period is forty seconds. External scanner/storage outages do not trigger liveness restarts; they remain visible retry/assurance conditions. External notification delivery is deferred at the user's request.
+Set **Schedule → Files scanned at once** in each profile (1–32). Worker capacity follows saved profile settings live; `V1FS_MAX_WORKERS` is ignored. Transfers have their own profile-controlled pool. Lowering limits lets active work finish.
 
-Share sources need read, rename, mkdir and delete rights inside their source root. Reserve `.v1fs-claims` for the scanner account. Do not treat claimed files as lost: their original and private paths appear in record details and persist across restarts. Never manually clear claims while jobs are active. Customer load/scale validation is run separately by the customer.
-
-Management `/livez` returns the API/database result with a separate engine field; it remains available during engine recovery. The Docker healthcheck requires both services. The engine publishes its progress heartbeat every second, with a 15-second freshness limit. Each service restarts independently; never delete queue/transfer evidence to recover a service. Use `docker compose logs` to distinguish `-serve` and `-engine` child PIDs. The browser prevents overlapping automatic refresh batches, and indexed history/read connections keep normal management reads independent of engine writes.
+The supervisor restarts the API and engine independently. `/livez` reports API/database liveness plus engine state; Docker health requires both services. Storage/scanner outages use normal retries, not liveness restarts. Share sources require read, rename, mkdir and delete rights; reserve `.v1fs-claims` for the scanner and never clear active claims manually.
 
 ## Large files
 
@@ -82,8 +191,14 @@ To investigate a file: search its name in File activity, inspect state, attempts
 
 ## Archive inspection operations
 
-See [archive limits and sandbox prerequisites](archive-inspection.md). The option defaults to off. No extra capabilities are required; Landlock and seccomp must be available. Unavailable confinement fails closed. Reserve original capture plus the configured expansion budget. Full SDK/member responses live in encrypted detail records; activity uses compact encrypted summaries. Workspace directories are engine-owned and removed after work or on restart. Profile changes do not rewrite queued snapshots.
+See [archive limits and sandbox prerequisites](archive-inspection.md). The optional local archive-inspection feature is hidden and disabled; its implementation is retained for future review. No extra capabilities are required; Landlock and seccomp must be available. Unavailable confinement fails closed. Reserve original capture plus the configured expansion budget. Full SDK/member responses live in encrypted detail records; activity uses compact encrypted summaries. Workspace directories are engine-owned and removed after work or on restart. Profile changes do not rewrite queued snapshots.
 
 ## Transfer worker controls
 
 Transfer workers follow saved profile limits (1–10) live, independently of scan capacity. The legacy `V1FS_TRANSFER_WORKERS` environment variable is ignored; remove it from older deployment files. Profile transfer settings govern destination concurrency and Azure Blob block/request tuning. Lowering limits affects subsequent admissions. See [performance tuning](performance-tuning.md). A restart preserves the database/key volume and reconciles incomplete moves; an unuploaded temporary capture may be downloaded again. It does not delete history. Theme preferences live in each browser.
+
+## Publishing the container
+
+The **Publish container** GitHub Actions workflow builds the clean repository Dockerfile after a successful **Build and correctness** run on `main`, or when manually dispatched. It publishes `latest` and `sha-FULL_COMMIT_SHA` to GHCR using the workflow's `GITHUB_TOKEN` with `packages: write`; no registry password belongs in source.
+
+For the first publication, the package owner must set **Package settings → Change visibility → Public**. Repository visibility does not by itself make a new container package public. Verify access with `docker --config /tmp/empty-docker-config pull ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest` using an empty Docker configuration. See [GitHub container registry visibility](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).

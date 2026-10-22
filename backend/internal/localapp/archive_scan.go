@@ -138,6 +138,7 @@ func archiveEnvelope(ev ArchiveEvidence, verdict string, policyBlocked bool, det
 // The original and every extracted regular member (including nested containers)
 // are required scans. Exclusions/size bypass rules never apply to members.
 func (a *App) scanWithArchives(ctx context.Context, local, name string, s Scanner, p Profile, originalDigest string, prior ...*ArchiveEvidence) ([]byte, error) {
+	ctx = WithScanIdentifier(ctx, name)
 	if !p.Archive.Enabled {
 		return a.Scan(ctx, local, s, p)
 	}
@@ -212,7 +213,7 @@ func (a *App) scanWithArchives(ctx context.Context, local, name string, s Scanne
 			raw = cached.Response
 			member.Reused = true
 		} else {
-			raw, scanErr = a.Scan(ctx, entry.Path, s, p)
+			raw, scanErr = a.Scan(WithScanIdentifier(ctx, entry.Name), entry.Path, s, p)
 		}
 		member.Verdict = core.Normalize(raw)
 		if scanErr != nil {

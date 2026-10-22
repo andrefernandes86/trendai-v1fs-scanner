@@ -379,7 +379,12 @@ func (a *App) ScanDirect(ctx context.Context, path string, s Scanner, p Profile)
 	if e != nil {
 		return nil, e
 	}
-	raw, e := c.ScanFileWithContext(ctx, path, tags)
+	reader, e := client.InitFileReader(path)
+	if e != nil {
+		return nil, e
+	}
+	defer reader.Close()
+	raw, e := c.ScanReaderWithContext(ctx, namedScanReader{AmaasClientFileReader: reader, name: scanIdentifier(ctx, path)}, tags)
 	return []byte(raw), e
 }
 
