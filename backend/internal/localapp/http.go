@@ -104,6 +104,7 @@ func (a *App) Handler() http.Handler {
 		respond(w, 200, j)
 	})
 	mux.HandleFunc("POST /api/jobs/{id}/retry", a.retryJob)
+	mux.HandleFunc("POST /api/jobs/{id}/resolve", a.resolveScanError)
 	mux.HandleFunc("POST /api/jobs/{id}/acknowledge", a.acknowledgeJob)
 	mux.HandleFunc("GET /api/status", a.status)
 	mux.HandleFunc("GET /api/audit", a.audit)
@@ -331,6 +332,9 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.RecoveryEnabled = false // Delivered files belong to the downstream application.
+	if p.ScanAttempts == 0 {
+		p.ScanAttempts = 4
+	}
 	if p.ID != r.PathValue("id") || !idPattern.MatchString(p.ID) || p.Name == "" {
 		problem(w, 400, "A profile ID and name are required.")
 		return
@@ -458,6 +462,26 @@ func (a *App) retryJob(w http.ResponseWriter, r *http.Request) {
 	}
 	if move, err := a.loadMove(r.PathValue("id")); err == nil && move.Phase == "COMPLETED" {
 		problem(w, 409, "Delivery is complete and the downstream application owns this file. Dismiss the record or submit a new source upload to scan again.")
+		return
+	}
+	var payload []byte
+	if a.DB.QueryRow("SELECT snapshot FROM jobs WHERE id=?", r.PathValue("id")).Scan(&payload) != nil {
+		problem(w, 500, "Cannot read retry policy.")
+		return
+	}
+	var snap Snapshot
+	if a.Unseal(payload, &snap) != nil {
+		problem(w, 500, "Cannot read retry policy.")
+		return
+	}
+	snap.Profile.ScanAttempts = 4
+	sealed, err := a.Seal(snap)
+	if err != nil {
+		problem(w, 500, "Cannot save retry policy.")
+		return
+	}
+	if _, err = a.DB.Exec("UPDATE jobs SET snapshot=? WHERE id=? AND state IN ('HELD','RETRY_PENDING')", sealed, r.PathValue("id")); err != nil {
+		problem(w, 500, "Cannot save retry policy.")
 		return
 	}
 	_, _ = a.DB.Exec("DELETE FROM stage_attempts WHERE job_id=?", r.PathValue("id"))

@@ -76,7 +76,7 @@ func (a *App) retryStage(id, stage string, p Profile, verdict, digest, dest, mes
 		_ = a.transition(id, "HELD", verdict, digest, dest, "Could not persist retry state.", 0)
 		return
 	}
-	limit := defaultInt(p.ScanAttempts, 5)
+	limit := defaultInt(p.ScanAttempts, 4)
 	if stage == "transfer" {
 		limit = defaultInt(p.TransferAttempts, 8)
 	}
@@ -100,6 +100,9 @@ func (a *App) retryStage(id, stage string, p Profile, verdict, digest, dest, mes
 	delay := time.Duration(defaultInt(p.RetryBaseSeconds, 10)*(1<<min(n-1, 8))) * time.Second
 	delay = min(delay, time.Hour)
 	delay += time.Duration(rand.IntN(1000)) * time.Millisecond
+	if stage == "scan" {
+		delay = time.Minute
+	}
 	_ = a.transition(id, state, verdict, digest, dest, message, delay)
 }
 func (a *App) verifyDestination(ctx context.Context, m *MoveRecord) error {

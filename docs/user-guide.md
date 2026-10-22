@@ -219,7 +219,7 @@ Choose **Sizing calculator**, directly after Audit log. The large-file example s
 
 ![Sizing calculator with transparent planning inputs](images/sizing-calculator.png)
 
-Adjust the inputs to your real workload, especially measured time through download/scan/verified move, file sizes and local history retention. Open **Advanced settings — timing, bursts and storage** and **Formulas and limits** to inspect the model. Calculator changes do not change profiles, delete history or configure hardware. Use the resulting concurrency as a starting point in **Scan profiles → Edit profile → Schedule → Files scanned at once** and ensure the shared engine worker cap is high enough. Profile settings above that cap do not create additional workers. Validate representative documents, large files/archives, retries and storage latency before treating this as a capacity commitment.
+Adjust the inputs to your real workload, especially measured time through download/scan/verified move, file sizes and local history retention. Open **Advanced settings — timing, bursts and storage** and **Formulas and limits** to inspect the model. Calculator changes do not change profiles, delete history or configure hardware. Use the resulting concurrency as a starting point in **Scan profiles → Edit profile → Schedule → Files scanned at once** (1–32 per profile). The engine follows saved profile settings. Validate representative documents, large files/archives, retries and storage latency before treating this as a capacity commitment.
 
 These are application planning estimates, not vendor-certified requirements. Cloud scanner compute is hosted by Trend; local scanner compute must be sized separately using the scanner's own guidance. [File Security overview](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-what-is-file-security) · [Containerized scanner](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-file-security-containerized-scanner).
 
@@ -283,7 +283,7 @@ Open **Audit log** to see saved configuration changes, processing decisions and 
 
 Archive settings: **Maximum archive entries** defaults to **10** and accepts **10–100**. The count is shared across all archive layers, including directories and nested archive members.
 
-Result tags automatically include `scan-failed=true` and `scanned=false` for incomplete archive inspections or unknown scans routed after exhausted retries. Incomplete archives with detected malware retain their malicious verdict and quarantine routing. Complete clean/malicious scans receive `scan-failed=false`. Azure Blob stores native tags; shares store JSON sidecars. Existing destination objects are not retroactively retagged.
+Result tags automatically include `scan-failed=true` and `scanned=false` for incomplete archive inspections or unknown scans routed after exhausted retries. Incomplete archive scans are retried before routing to Scan failed; recorded malware detections remain available in the original scanner evidence. Complete clean/malicious scans receive `scan-failed=false`. Azure Blob stores native tags; shares store JSON sidecars. Existing destination objects are not retroactively retagged.
 
 When scan, download or copy retries are exhausted, the record is held with `scan-failed=true` and `failure-stage`. The retained source receives these labels as native Blob tags or a share JSON sidecar, after a source-version check. Existing Blob tags are preserved. If storage access, tag capacity, or source identity prevents annotation, record details explicitly report that the source tag could not be written. A copy failure does not erase a confirmed scan verdict or remove the source.
 
@@ -352,3 +352,18 @@ In **Scan profiles → Options → Transfer speed**, **Simultaneous transfers** 
 ![Transfer settings with ten delivery slots](images/transfer-speed.png)
 
 **Destination verification off** means no full destination-content readback. SHA-256 and CRC32C are still generated together during source download, without an extra disk pass. In technical records, `sourceChecksumAlgorithms` identifies them; `destinationVerification=false` and an empty `verifiedAt` show that no destination content comparison was performed. A nonzero `verify` duration records properties/size/identity checks, not necessarily hashing. The UI calls this timing **destination checks** and labels the CRC as **Source CRC32C**. The downstream application continues to own delivered-file lifecycle.
+
+## Resolve scan errors
+
+The default is **one initial scan plus three retries**, waiting **60 seconds between scan attempts**. Scanner exceptions and incomplete archive coverage follow this schedule before delivery to Scan failed. Storage-copy/download retries have separate limits and delays. The profile's maximum scan-attempt setting includes the first attempt; use **4** for three retries. Manual resubmission starts a fresh four-attempt budget.
+
+Click **Scan errors** on Overview, then **Resubmit / move…** beside a held or retrying unknown result:
+
+- **Resubmit for scanning** creates a new scan request using the recorded exact file identity.
+- **Move to Safe files manually**, **Move to Malicious files manually**, or **Move to Scan failed** queues an explicit manual delivery.
+
+![Resubmit a scan error or manually choose a destination](images/resolve-scan-error.png)
+
+Confirm the action in the dialog. Moving manually does not certify a clean result: the file retains unknown/scan-failed labels and the original scan record remains unchanged. Manual delivery to Safe files can expose unscanned content to downstream applications. Missing or changed files stop with an error; use Dismiss to clear records for files that no longer exist.
+
+Delivered files remain owned by the downstream application. These buttons authorize access to one specific failed file only; there is no automatic destination-folder monitoring or recovery. Each requested action creates an audit entry linking the new job to the original record.

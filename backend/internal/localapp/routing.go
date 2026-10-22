@@ -24,6 +24,9 @@ func routeResult(ctx context.Context, id string, s Snapshot, local, digest, verd
 	default:
 		target, prefix, state = s.Failed, s.Profile.FailedPrefix, "HELD"
 	}
+	if s.ManualAction != "" {
+		state = "ACKNOWLEDGED"
+	}
 	if target.ID == "" {
 		return "", "", errors.New("destination not configured in this job's policy snapshot")
 	}

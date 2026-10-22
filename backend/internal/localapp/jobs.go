@@ -402,6 +402,10 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		_ = a.transition(id, "HELD", "UNKNOWN", digest, "", "Source differs from previously captured bytes.", 0)
 		return
 	}
+	if s.ManualAction != "" {
+		a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "manual-override", "Administrator requested manual delivery to "+s.ManualAction+"; NOT a clean scan verdict.")
+		return
+	}
 	relative := strings.TrimPrefix(s.Key, s.Source.Prefix+s.Profile.Prefix)
 	action, rule := s.Profile.FilePolicy(relative, s.Size)
 	if action == "hold" || action == "ignore" {
@@ -428,7 +432,7 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 	}
 	var used int
 	_ = a.DB.QueryRow("SELECT attempts FROM stage_attempts WHERE job_id=? AND stage='scan'", id).Scan(&used)
-	if used >= defaultInt(s.Profile.ScanAttempts, 5) {
+	if used >= defaultInt(s.Profile.ScanAttempts, 4) {
 		a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", "Scan attempts exhausted; isolated for review.")
 		return
 	}
@@ -455,7 +459,7 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		return
 	}
 	if scanErr != nil {
-		if used+1 >= defaultInt(s.Profile.ScanAttempts, 5) {
+		if used+1 >= defaultInt(s.Profile.ScanAttempts, 4) {
 			_, _ = a.stageAttempt(id, "scan")
 			a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", "Scan request attempts exhausted.")
 		} else {
@@ -468,6 +472,13 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		return
 	}
 	verdict = core.Normalize(raw)
+	var coverage struct {
+		Archive *ArchiveSummary `json:"archiveInspection"`
+	}
+	_ = json.Unmarshal(raw, &coverage)
+	if coverage.Archive != nil && !coverage.Archive.Complete {
+		verdict = "UNKNOWN"
+	}
 	var origin struct {
 		ScanType     string `json:"scanType"`
 		ScannerCalls int    `json:"scannerCalls"`
@@ -480,15 +491,7 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		return
 	}
 	if verdict == "UNKNOWN" {
-		if scanException(raw) == "permanent" {
-			reason := "Permanent scanner exception; inspect scanner response."
-			if origin.ScanType == "archive-inspection" {
-				reason = "Archive inspection blocked or incomplete; inspect archive evidence."
-			}
-			a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", reason)
-			return
-		}
-		if used+1 >= defaultInt(s.Profile.ScanAttempts, 5) {
+		if used+1 >= defaultInt(s.Profile.ScanAttempts, 4) {
 			_, _ = a.stageAttempt(id, "scan")
 			a.routeCaptured(ctx, id, s, local, digest, "UNKNOWN", "", "Scan result remained unknown after retries.")
 		} else {
