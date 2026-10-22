@@ -441,3 +441,5 @@ A longer wait reduces early pickup after a temporary upload pause but does not e
 Scan-failed storage labels default to `verdict=scan_failed`. The configured key=value pairs are the failure flags applied automatically; no separate `scan-failed=true` flag is added. Incomplete scans retain `scanned=false`.
 
 Delivery verification adds a full destination read, approximately one file’s size in extra network traffic, and checksum processing. For example, reading 10 GB at 100 MB/s takes about 100 seconds before overhead. Slow links, storage and simultaneous transfers can increase this time; source cleanup and release of the transfer slot wait for verification.
+
+The expanded scanner card separates **Container RAM used**, **Container RAM limit**, **Host RAM total**, and **Host RAM available**. A container with no memory limit shares host RAM; host available memory is an estimate across all workloads, not a reservation. Container usage includes memory charged to its cgroup, including cached file data.

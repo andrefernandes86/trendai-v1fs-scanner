@@ -76,7 +76,7 @@ func containerResources(data string) map[string]any {
 	} else {
 		available = 0
 	}
-	result := map[string]any{"cpuCores": cpus, "memoryUsedBytes": used, "memoryLimitBytes": limit, "memoryTotalBytes": total, "memoryAvailableBytes": available, "diskScope": "Data-volume filesystem; shared with other files on that filesystem."}
+	result := map[string]any{"cpuCores": cpus, "memoryUsedBytes": used, "memoryLimitBytes": limit, "memoryTotalBytes": total, "memoryAvailableBytes": available, "hostMemoryTotalBytes": hostTotal, "hostMemoryAvailableBytes": hostAvailable, "diskScope": "Data-volume filesystem; shared with other files on that filesystem."}
 	var disk syscall.Statfs_t
 	if syscall.Statfs(data, &disk) == nil && disk.Blocks > 0 {
 		result["diskTotalBytes"] = disk.Blocks * uint64(disk.Bsize)

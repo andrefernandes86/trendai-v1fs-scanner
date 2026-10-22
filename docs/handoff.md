@@ -55,7 +55,7 @@ Do not run `docker compose down -v`: it deletes the data volume. For an existing
 | Use the profile's EICAR test input | Malicious result, Malicious destination, original bytes preserved; never execute the sample |
 | Upload into an Incoming subfolder | Discovered and scanned automatically |
 | Enable archive inspection and upload a small safe ZIP | Original and members inspected; archive delivered according to result |
-| Upload an archive that exceeds the configured limits | Incomplete/unknown result, `scan-failed=true`, isolated in Scan failed storage |
+| Upload an archive that exceeds the configured limits | Incomplete/unknown result, configured scan-failed labels, isolated in Scan failed storage |
 | Inspect an unresolved failure | Error and retry counts visible; exhausted scan attempts isolate it with failure tags |
 | Inspect a copy failure | Source retained; exhausted attempts trigger source failure tagging; inaccessible storage produces an explicit tag-write error |
 | Acknowledge a held file | ACKNOWLEDGED; no further retries/recovery for that version; file/history remain |
