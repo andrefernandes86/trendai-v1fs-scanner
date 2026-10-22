@@ -100,7 +100,15 @@ func (a *App) jobRoutingTags(id string, p Profile, verdict string) (map[string]s
 		return nil, err
 	}
 	if details.ArchiveInspection != nil && !details.ArchiveInspection.Complete {
-		tags["scan-failed"] = "true"
+		failure, err := p.FailureTags()
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range failure {
+			if k != "verdict" || verdict != "MALICIOUS" {
+				tags[k] = v
+			}
+		}
 		tags["scanned"] = "false"
 	}
 	return tags, nil

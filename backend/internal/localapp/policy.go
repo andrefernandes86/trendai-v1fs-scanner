@@ -130,7 +130,14 @@ func defaultInt(v, fallback int) int {
 
 // SDKTags are scan-event labels sent to Vision One, distinct from storage tags.
 func (p Profile) SDKTags() ([]string, error) {
-	tags := []string{"app:trendai-v1fs", "profile:" + p.ID}
+	name := strings.TrimSpace(p.Name)
+	if name == "" {
+		name = p.ID // Legacy snapshots without a display name.
+	}
+	if len("profile:"+name) > 63 {
+		return nil, fmt.Errorf("Profile name must fit within 55 bytes for the automatic Vision One profile tag.")
+	}
+	tags := []string{"app:trendai-v1fs", "profile:" + name}
 	for _, tag := range strings.FieldsFunc(p.VisionOneTags, func(r rune) bool { return r == ',' || r == '\n' || r == '\r' }) {
 		tag = strings.TrimSpace(tag)
 		if tag != "" {

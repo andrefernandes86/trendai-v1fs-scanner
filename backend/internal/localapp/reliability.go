@@ -91,7 +91,7 @@ func (a *App) retryStage(id, stage string, p Profile, verdict, digest, dest, mes
 		state = "HELD"
 		message += " Retry budget exhausted; operator action required."
 		if stage == "scan" || stage == "transfer" || stage == "download" {
-			message += " scan-failed=true; failure-stage=" + stage + "."
+			message += " Configured failure labels applied; failure-stage=" + stage + "."
 			if err := a.tagExhaustedSource(id, stage, verdict); err != nil {
 				message += " Source failure tag could not be written; storage access or source identity needs review."
 			}
@@ -272,7 +272,7 @@ func (a *App) routeCaptured(ctx context.Context, id string, s Snapshot, local, d
 }
 func (a *App) routeCapturedNow(ctx context.Context, id string, s Snapshot, local, digest, verdict, rule, reason string) {
 	if verdict == "UNKNOWN" && sameStorageRoot(s.Source, s.Failed) {
-		message := reason + " Recovery result still unknown; isolated source retained. scan-failed=true."
+		message := reason + " Recovery result still unknown; isolated source retained. Configured failure labels applied."
 		if err := a.tagExhaustedSource(id, "scan", verdict); err != nil {
 			message += " Source failure tag could not be written; storage access or source identity needs review."
 		}

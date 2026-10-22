@@ -26,7 +26,7 @@ func TestExhaustedCopyTagsClaimedSourceAndPreservesReplacement(t *testing.T) {
 	}
 	a.retryStage(id, "transfer", s.Profile, "CLEAN", "", "", "Copy unavailable.")
 	data, err := os.ReadFile(stores["source"].p(s.sourceKey() + ".v1fs-tags.json"))
-	if err != nil || !strings.Contains(string(data), `"scan-failed":"true"`) || !strings.Contains(string(data), `"failure-stage":"transfer"`) {
+	if err != nil || !strings.Contains(string(data), `"verdict":"scan_failed"`) || !strings.Contains(string(data), `"failure-stage":"transfer"`) {
 		t.Fatal(string(data), err)
 	}
 	if strings.Contains(string(data), `"scanned":"false"`) {
@@ -37,7 +37,7 @@ func TestExhaustedCopyTagsClaimedSourceAndPreservesReplacement(t *testing.T) {
 	}
 	var state, message string
 	a.DB.QueryRow("SELECT state,error FROM jobs WHERE id=?", id).Scan(&state, &message)
-	if state != "HELD" || !strings.Contains(message, "scan-failed=true") {
+	if state != "HELD" || !strings.Contains(message, "Configured failure labels applied") {
 		t.Fatal(state, message)
 	}
 	if _, err = os.Stat(stores["source"].p(s.sourceKey())); err != nil {
@@ -53,7 +53,7 @@ func TestExhaustedTagWriteFailureIsRecorded(t *testing.T) {
 	a.retryStage(id, "download", s.Profile, "UNKNOWN", "", "", "Download unavailable.")
 	var message string
 	a.DB.QueryRow("SELECT error FROM jobs WHERE id=?", id).Scan(&message)
-	if !strings.Contains(message, "scan-failed=true") || !strings.Contains(message, "could not be written") {
+	if !strings.Contains(message, "Configured failure labels applied") || !strings.Contains(message, "could not be written") {
 		t.Fatal(message)
 	}
 }
@@ -68,11 +68,11 @@ func TestUnknownRecoveryRetainsIsolationAndFailureTag(t *testing.T) {
 	a.routeCapturedNow(context.Background(), id, s, "", "", "UNKNOWN", "", "All scan attempts exhausted.")
 	var state, verdict, destination, message string
 	a.DB.QueryRow("SELECT state,verdict,destination,error FROM jobs WHERE id=?", id).Scan(&state, &verdict, &destination, &message)
-	if state != "HELD" || verdict != "UNKNOWN" || destination != s.Source.BaseURL()+"/"+s.Key || !strings.Contains(message, "scan-failed=true") {
+	if state != "HELD" || verdict != "UNKNOWN" || destination != s.Source.BaseURL()+"/"+s.Key || !strings.Contains(message, "Configured failure labels applied") {
 		t.Fatal(state, verdict, destination, message)
 	}
 	tags, err := os.ReadFile(stores["source"].p(s.Key + ".v1fs-tags.json"))
-	if err != nil || !strings.Contains(string(tags), `"scan-failed":"true"`) || !strings.Contains(string(tags), `"scanned":"false"`) {
+	if err != nil || !strings.Contains(string(tags), `"verdict":"scan_failed"`) || !strings.Contains(string(tags), `"scanned":"false"`) {
 		t.Fatal(string(tags), err)
 	}
 	if _, err := stores["source"].Stat(s.Key); err != nil {

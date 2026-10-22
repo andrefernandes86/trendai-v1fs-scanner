@@ -297,9 +297,9 @@ Open **Audit log** to see saved configuration changes, processing decisions and 
 
 Local archive controls are hidden and disabled. Their implementation remains in source control for future review.
 
-Result tags automatically include `scan-failed=true` and `scanned=false` for incomplete archive inspections or unknown scans routed after exhausted retries. Incomplete archive scans are retried before routing to Scan failed; recorded malware detections remain available in the original scanner evidence. Complete clean/malicious scans receive `scan-failed=false`. Azure Blob stores native tags; shares store JSON sidecars. Existing destination objects are not retroactively retagged.
+Failed deliveries use the configured scan-failed labels (default `verdict=scan_failed`) and `scanned=false` for incomplete inspections or unknown scans routed after exhausted retries. Incomplete archive scans are retried before routing to Scan failed; recorded malware detections remain available in the original scanner evidence. Complete clean/malicious scans receive `scan-failed=false`. Azure Blob stores native tags; shares store JSON sidecars. Existing destination objects are not retroactively retagged.
 
-When scan, download or copy retries are exhausted, the record is held with `scan-failed=true` and `failure-stage`. The retained source receives these labels as native Blob tags or a share JSON sidecar, after a source-version check. Existing Blob tags are preserved. If storage access, tag capacity, or source identity prevents annotation, record details explicitly report that the source tag could not be written. A copy failure does not erase a confirmed scan verdict or remove the source.
+When scan, download or copy retries are exhausted, the record is held and the configured failure labels and `failure-stage` are applied. The retained source receives these labels as native Blob tags or a share JSON sidecar, after a source-version check. Existing Blob tags are preserved. If storage access, tag capacity, or source identity prevents annotation, record details explicitly report that the source tag could not be written. A copy failure does not erase a confirmed scan verdict or remove the source.
 
 Files moved to Scan failed keep their recorded failure labels. After handoff the scanner does not reopen, rescan, retag, move or delete them. Review stored history, dismiss unwanted held records, or submit a new source upload to request another scan.
 
@@ -392,7 +392,7 @@ Open **Scan profiles → Edit profile → Options → Tags and labels**.
 | Storage labels for clean and malicious files | Delivered storage objects or their sidecars | Comma-separated `key=value` pairs, for example `team=finance,environment=production`. |
 | Additional storage labels for clean / malicious files | Added to the matching delivery result | Same `key=value` format. Verdict-specific labels override common labels, except reserved scan-result fields. |
 
-Vision One accepts **8 tags per scan**, each up to **63 bytes** in the Go SDK (63 ASCII characters). The app reserves two for `app:trendai-v1fs` and `profile:<profile-id>`, leaving **6 custom tags**. These describe the scan request; they are not malware names or verdicts. They are sent when the scan runs, not retroactively added to older Vision One results. See [Trend's Go SDK tag reference](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-pml-file-sec-sdk).
+Vision One accepts **8 tags per scan**, each up to **63 bytes** in the Go SDK (63 ASCII characters). The app reserves two for `app:trendai-v1fs` and `profile:<profile-name>`, leaving **6 custom tags**. The automatic profile tag uses the saved profile name (up to 55 bytes), for example `profile:Deloitte Demo`. These describe the scan request; they are not malware names or verdicts. They are sent when the scan runs, not retroactively added to older Vision One results. See [Trend's Go SDK tag reference](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-pml-file-sec-sdk).
 
 Storage labels are separate: Azure Blob uses native blob index tags; ADLS Gen2 uses metadata for delivered files; Azure Files, SMB and NFS use JSON sidecar files. Azure Files has no native blob index tags. The app adds `scanned`, `verdict` and `scan-failed` according to the recorded outcome. These storage labels do not populate the Vision One Tags column.
 
@@ -416,7 +416,7 @@ Use **Setup guide** in the top bar for the workflow diagram and the storage/scan
 
 ## Failure labels and selected destinations
 
-Under **Options → Tags and labels → Scan-failed storage labels**, add your own failure flag, for example `processing-status=failed,review=required`. These extra labels apply to scan-failed deliveries and retained sources after download/copy/scan retry exhaustion. Standard `scan-failed=true`, `scanned=false` and the failure verdict remain automatic for unknown scans; custom labels cannot contradict them. A confirmed malware/clean result is not erased by a later copy failure. Up to six custom failure labels leave room for required result/failure-stage tags.
+Under **Options → Tags and labels → Scan-failed storage labels**, add your own failure flag, for example `processing-status=failed,review=required`. These configured labels apply to scan-failed deliveries and retained sources after download/copy/scan retry exhaustion. The configured labels replace the separate hardcoded failure flag. Unknown scans also receive `scanned=false`; failure labels cannot claim a clean or malicious result. A confirmed malware/clean result is not erased by a later copy failure. Up to eight failure labels leave room for required scanned/failure-stage tags.
 
 In **Large-file handling**, choose **Hold at source** to leave oversized files untouched, or **Move to selected storage connection — NOT SCANNED** to choose a saved destination and optional subfolder. The destination must be outside the source storage root. This is an explicit bypass, not a clean scan result.
 
@@ -430,10 +430,14 @@ Open **Options → Delivery verification**. With **Compare delivered file conten
 
 ## Uploads on slower networks
 
-New profiles start with **10-second source checks**, a **120-second unchanged-upload wait**, and a **30-second base delay for storage retries**. Existing saved values are preserved. The check frequency and quiet period serve different purposes: frequent checks discover files; the quiet period waits for an unchanged identity.
+New profiles start with **10-second source checks**, a **10-second unchanged-upload wait**, and a **30-second base delay for storage retries**. Existing saved values are preserved. The check frequency and quiet period serve different purposes: frequent checks discover files; the quiet period waits for an unchanged identity.
 
 A longer wait reduces early pickup after a temporary upload pause but does not establish that an uploader has finished. Prefer publishing only completed files, for example by uploading under a temporary name excluded from scanning and then renaming. Scan retries remain three retries after the first attempt, one minute apart; storage retry delays use their own increasing schedule.
 
 **Show a slow-processing warning after (minutes)** is a dashboard warning threshold, measured from job submission including queue, scan, delivery and retry time. The default **60 minutes** means one hour. It neither stops a job nor sends email. The per-attempt job timeout is separate.
 
 **Confirm exclusive file-share writes during delivery** applies only to Azure Files, SMB or NFS destinations. Enable it only when no other application can overwrite, rename or delete the file until delivery and source cleanup finish. Otherwise leave it off; share delivery is held. Blob/ADLS Gen2 use leases and do not require this confirmation. Downstream lifecycle management is permitted after handoff.
+
+Scan-failed storage labels default to `verdict=scan_failed`. The configured key=value pairs are the failure flags applied automatically; no separate `scan-failed=true` flag is added. Incomplete scans retain `scanned=false`.
+
+Delivery verification adds a full destination read, approximately one file’s size in extra network traffic, and checksum processing. For example, reading 10 GB at 100 MB/s takes about 100 seconds before overhead. Slow links, storage and simultaneous transfers can increase this time; source cleanup and release of the transfer slot wait for verification.

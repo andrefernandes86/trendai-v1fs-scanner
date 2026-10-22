@@ -35,7 +35,6 @@ func (a *App) tagExhaustedSource(id, stage, verdict string) error {
 	tags["failure-stage"] = stage
 	if verdict == "CLEAN" || verdict == "MALICIOUS" {
 		delete(tags, "scanned")
-		delete(tags, "verdict")
 	}
 	if verdict != "CLEAN" && verdict != "MALICIOUS" {
 		tags["scanned"] = "false"

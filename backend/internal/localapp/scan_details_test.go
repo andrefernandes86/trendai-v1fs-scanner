@@ -46,7 +46,7 @@ func TestFailureRoutingTags(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if verdict == "UNKNOWN" && (tags["scan-failed"] != "true" || tags["scanned"] != "false") {
+		if verdict == "UNKNOWN" && (tags["verdict"] != "scan_failed" || tags["scanned"] != "false") {
 			t.Fatal(tags)
 		}
 		if (verdict == "CLEAN" || verdict == "MALICIOUS") && tags["scan-failed"] != "false" {
@@ -61,7 +61,7 @@ func TestFailureRoutingTags(t *testing.T) {
 	}
 	for _, verdict := range []string{"UNKNOWN", "MALICIOUS"} {
 		tags, err := a.jobRoutingTags("incomplete", Profile{}, verdict)
-		if err != nil || tags["scan-failed"] != "true" || tags["scanned"] != "false" {
+		if err != nil || tags["scanned"] != "false" {
 			t.Fatal(tags, err)
 		}
 		if verdict == "MALICIOUS" && tags["verdict"] != "malicious" {

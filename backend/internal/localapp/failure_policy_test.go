@@ -18,7 +18,7 @@ func TestCustomFailureLabelsReachRetainedSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, err := os.ReadFile(stores["source"].p(s.Key + ".v1fs-tags.json"))
-	if err != nil || !strings.Contains(string(body), `"processing-status":"failed"`) || !strings.Contains(string(body), `"scan-failed":"true"`) {
+	if err != nil || !strings.Contains(string(body), `"processing-status":"failed"`) || strings.Contains(string(body), `"scan-failed":"true"`) {
 		t.Fatal(string(body), err)
 	}
 	tags, err := routingTags(s.Profile, "UNKNOWN")
@@ -84,5 +84,17 @@ func TestRuleMoveUsesSelectedConnectionWithoutCleanVerdict(t *testing.T) {
 	p.Rules = append(p.Rules, FileRule{ID: "hold", Pattern: "*.png", Action: "hold"})
 	if action, _ := p.FilePolicy("photo.png", 9); action != "hold" {
 		t.Fatal("hold must win", action)
+	}
+}
+
+func TestConfiguredFailureFlagReplacesHardcodedFlag(t *testing.T) {
+	for _, flag := range []string{"verdict=scan-failed", "processing-status=failed"} {
+		tags, err := (Profile{FailedTags: flag}).FailureTags()
+		if err != nil || tags["scan-failed"] != "" || tags["scanned"] != "false" {
+			t.Fatal(tags, err)
+		}
+		if flag == "verdict=scan-failed" && tags["verdict"] != "scan-failed" {
+			t.Fatal(tags)
+		}
 	}
 }

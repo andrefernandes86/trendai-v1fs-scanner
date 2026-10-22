@@ -75,14 +75,18 @@ func (p Profile) FailureTags() (map[string]string, error) {
 		}
 		result[k] = v
 	}
-	for k, v := range map[string]string{"scan-failed": "true", "scanned": "false", "verdict": "scan_failed"} {
-		if old, ok := result[k]; ok && old != v {
-			return nil, fmt.Errorf("%s is reserved; expected %s for failed scans", k, v)
-		}
-		result[k] = v
+	if len(result) == 0 {
+		result["verdict"] = "scan_failed"
 	}
+	if v, ok := result["scanned"]; ok && v != "false" {
+		return nil, fmt.Errorf("scanned is reserved; expected false for failed scans")
+	}
+	if v := strings.ToLower(result["verdict"]); v == "clean" || v == "malicious" {
+		return nil, fmt.Errorf("Failed scans cannot be labeled clean or malicious")
+	}
+	result["scanned"] = "false"
 	if len(result) > 9 {
-		return nil, fmt.Errorf("Use at most 6 additional failure labels; room is reserved for scan-result and failure-stage labels.")
+		return nil, fmt.Errorf("Use at most 8 failure labels; room is reserved for scanned and failure-stage labels.")
 	}
 	return result, nil
 }

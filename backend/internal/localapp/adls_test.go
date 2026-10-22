@@ -101,7 +101,7 @@ func TestADLSFailureLabelsDoNotChangeSourceIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	sidecar := string(fake.objects["/incoming/report.csv.v1fs-tags.json"])
-	if !strings.Contains(sidecar, `"scan-failed":"true"`) || !strings.Contains(sidecar, `"failure-stage":"download"`) || string(fake.objects["/incoming/report.csv"]) != "file content" {
+	if !strings.Contains(sidecar, `"verdict":"scan_failed"`) || !strings.Contains(sidecar, `"failure-stage":"download"`) || string(fake.objects["/incoming/report.csv"]) != "file content" {
 		t.Fatal(sidecar)
 	}
 }

@@ -12,9 +12,9 @@ import (
 )
 
 func TestVisionOneTagsAreDistinctFromStorageLabels(t *testing.T) {
-	p := Profile{ID: "policy", VisionOneTags: "team:finance, environment:production\nowner:operations", ScannedTags: "storage=only"}
+	p := Profile{ID: "policy", Name: "Deloitte Demo", VisionOneTags: "team:finance, environment:production\nowner:operations", ScannedTags: "storage=only"}
 	tags, err := p.SDKTags()
-	if err != nil || !reflect.DeepEqual(tags, []string{"app:trendai-v1fs", "profile:policy", "team:finance", "environment:production", "owner:operations"}) {
+	if err != nil || !reflect.DeepEqual(tags, []string{"app:trendai-v1fs", "profile:Deloitte Demo", "team:finance", "environment:production", "owner:operations"}) {
 		t.Fatal(tags, err)
 	}
 	labels, err := routingTags(p, "CLEAN")
@@ -79,4 +79,16 @@ func TestLiveVisionOneCustomTags(t *testing.T) {
 		t.Fatal("SDK did not return all configured tags", result.Tags)
 	}
 	t.Log("SDK returned both automatic tags and both custom tags")
+}
+
+func TestVisionOneProfileNameTagLimit(t *testing.T) {
+	p := Profile{ID: "internal-id", Name: strings.Repeat("n", 55)}
+	tags, err := p.SDKTags()
+	if err != nil || tags[1] != "profile:"+p.Name {
+		t.Fatal(tags, err)
+	}
+	p.Name += "n"
+	if _, err := p.SDKTags(); err == nil {
+		t.Fatal("accepted oversized profile name tag")
+	}
 }
