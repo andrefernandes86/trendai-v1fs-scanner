@@ -62,6 +62,10 @@ func archiveKind(file, name string) (string, error) {
 		return "unsupported", nil
 	case len(b) >= 4 && (string(b[:4]) == "Rar!" || string(b[:4]) == "\x28\xb5\x2f\xfd"):
 		return "unsupported", nil
+	case len(b) >= 4 && (string(b[:4]) == "MSCF" || string(b[:4]) == "\x04\x22\x4d\x18"):
+		return "unsupported", nil
+	case len(b) >= 2 && b[0] == 0x1f && b[1] == 0x9d:
+		return "unsupported", nil
 	case len(b) >= 3 && string(b[:3]) == "BZh":
 		return "unsupported", nil
 	}

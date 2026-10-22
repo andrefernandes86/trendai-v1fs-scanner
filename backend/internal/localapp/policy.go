@@ -31,6 +31,14 @@ func globMatch(pattern, key string) bool {
 }
 
 const DefaultMaxScanBytes int64 = 100_000_000_000
+const DefaultMaxCompressedScanBytes int64 = 2_000_000_000
+
+func (p Profile) MaxCompressedScanSize() int64 {
+	if p.MaxCompressedScanBytes <= 0 || p.MaxCompressedScanBytes > DefaultMaxCompressedScanBytes {
+		return DefaultMaxCompressedScanBytes
+	}
+	return p.MaxCompressedScanBytes
+}
 
 func (p Profile) MaxScanSize() int64 {
 	if p.MaxScanBytes == 0 {
@@ -42,6 +50,9 @@ func (p Profile) JobTimeout() time.Duration {
 	return time.Duration(defaultInt(p.JobTimeoutSeconds, 21600)) * time.Second
 }
 func (p Profile) FilePolicy(key string, size int64) (string, string) {
+	return p.filePolicy(key, size, compressedFileName(key))
+}
+func (p Profile) filePolicy(key string, size int64, compressed bool) (string, string) {
 	// Hold always wins over bypass. Rules are case-sensitive and operate on slash-normalized relative paths.
 	for _, action := range []string{"hold", "exclude", "route"} {
 		for _, rule := range p.Rules {
@@ -55,18 +66,23 @@ func (p Profile) FilePolicy(key string, size int64) (string, string) {
 			return "ignore", pattern
 		}
 	}
-	if size > p.MaxScanSize() {
-		switch p.OversizeAction {
+	limit, action, rule, reason := p.MaxScanSize(), p.OversizeAction, "size_limit", "oversized: exceeds profile maximum regular-file scan size"
+	if compressed {
+		limit, action, rule, reason = p.MaxCompressedScanSize(), p.CompressedOversizeAction, "compressed_size_limit", "compressed file exceeds maximum archive scan size"
+	}
+	if size > limit {
+		switch action {
 		case "clean":
-			return "oversize_clean", "size_limit"
+			return "oversize_clean", rule
 		case "failed":
-			return "oversize_failed", "size_limit"
+			return "oversize_failed", rule
 		case "custom":
-			return "oversize_custom", "size_limit"
+			return "oversize_custom", rule
 		default:
-			return "hold", "oversized: exceeds profile maximum scan size"
+			return "hold", reason
 		}
 	}
+
 	return "scan", ""
 }
 func (p Profile) ReliabilityValidate() error {
@@ -87,6 +103,15 @@ func (p Profile) ReliabilityValidate() error {
 	}
 	if p.OversizeAction != "" && p.OversizeAction != "hold" && p.OversizeAction != "clean" && p.OversizeAction != "failed" && p.OversizeAction != "custom" {
 		return fmt.Errorf("Invalid oversized file action.")
+	}
+	if p.MaxCompressedScanBytes < 0 || p.MaxCompressedScanBytes > DefaultMaxCompressedScanBytes {
+		return fmt.Errorf("Maximum compressed-file scan size must be at most 2 GB (2,000,000,000 bytes), or zero for the default.")
+	}
+	if p.CompressedOversizeAction != "" && p.CompressedOversizeAction != "hold" && p.CompressedOversizeAction != "clean" && p.CompressedOversizeAction != "failed" && p.CompressedOversizeAction != "custom" {
+		return fmt.Errorf("Invalid oversized compressed-file action.")
+	}
+	if p.CompressedOversizeAction == "custom" && p.CompressedOversizeMount == "" {
+		return fmt.Errorf("Select a storage connection for oversized compressed files.")
 	}
 	if p.LargeFileScans < 0 || p.LargeFileScans > 8 {
 		return fmt.Errorf("Large-file concurrency must be 1–8, or zero for 1.")

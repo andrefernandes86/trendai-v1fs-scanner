@@ -140,3 +140,5 @@
 .source-route{margin-top:18px}.source-route .routing-symbol{background:#edf3fd;color:#597fbb}:root[data-theme="dark"] .source-route .routing-symbol{background:#243653;color:#a6c2ef}
 
 .tag-subsection{border:1px solid var(--dark-border,#dfe6ef);border-radius:9px;padding:18px;display:flex;flex-direction:column;gap:14px}.tag-subsection+.tag-subsection{margin-top:24px}.tag-subsection>h3,.tag-subsection>p,.tag-subsection>.field{margin:0}.tag-subsection>h3{font-size:14px}.tag-subsection>small{display:block;line-height:1.6}.tag-subsection .profile-tag-fields{margin:0}
+
+.size-policy-section{margin:24px 0;padding-top:24px;border-top:1px solid var(--dark-border,#e4e9f1)}.size-policy-section h4{margin:0 0 14px;font-size:13px;color:var(--dark-text-secondary,#33445f)}.size-policy-section>p{margin:0 0 18px}.size-policy-section>small{display:block;margin-top:16px;line-height:1.6;color:var(--dark-muted,#8290a5)}

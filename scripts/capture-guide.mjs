@@ -26,7 +26,7 @@ try{
  await step('Destinations');await dialogShot('profile-destinations.png');
  await step('Schedule');await dialogShot('profile-schedule.png');
  await step('Protection');await dialogShot('profile-protection.png');
- await step('Options');await dialogShot('profile-options.png');await page.getByText('Large-file handling',{exact:true}).click();await page.locator('details.profile-option-group').filter({has:page.locator('summary',{hasText:'Large-file handling'})}).screenshot({path:new URL('profile-large-files.png',output).pathname});
+ await step('Options');await dialogShot('profile-options.png');await page.getByText('Large-file handling',{exact:true}).click();await page.setViewportSize({width:1440,height:1800});await page.locator('details.profile-option-group').filter({has:page.locator('summary',{hasText:'Large-file handling'})}).screenshot({path:new URL('profile-large-files.png',output).pathname,style:'.profile-stepper,.profile-wizard .form-footer{position:static!important}'});await page.setViewportSize({width:1440,height:1000});
  for(const [title,file] of [['Tags and labels','profile-tags.png'],['Delivery verification','delivery-verification.png'],['Upload checks and retries','upload-checks-retries.png']]){
   const group=page.locator('details.profile-option-group').filter({has:page.locator('summary').filter({hasText:new RegExp('^'+title+'$')})});
   await group.locator('summary').click();await page.setViewportSize({width:1440,height:1800});await group.screenshot({path:new URL(file,output).pathname,style:'.profile-stepper{position:static!important}.profile-wizard .form-footer{position:static!important}'});await group.locator('summary').click();await page.setViewportSize({width:1440,height:1000});

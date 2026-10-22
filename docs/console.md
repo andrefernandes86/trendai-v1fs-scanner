@@ -55,9 +55,9 @@ Assurance separates overdue active work from held review. Historical source-read
 
 ## Large files and oversized routing
 
-The profile editor includes **Large files & size policy**: maximum submitted size (up to 100 GB decimal), action above the threshold, concurrency for files at least 1 GB and per-attempt job timeout. Defaults are 100 GB, hold, one large file and six hours. Hold leaves the file at source with an inventory policy reason. Both oversized move actions mark NOT SCANNED and apply scanned=false/verdict=not_scanned/reason=oversized. A clean destination is an explicit bypass choice, never a clean scan verdict.
+In **Options → Large-file handling**, regular files default to 100 GB and compressed files to 2 GB (decimal), using the archive's own size. Each type has a separate oversized action: hold, move to clean, move to scan failed, or move to a selected saved connection/subfolder outside the source root. Both default to hold. Files above the corresponding limit do not reach the SDK. Moves retain NOT SCANNED evidence (`scanned=false`, `verdict=not_scanned`, `reason=oversized`), even when the destination is clean storage.
 
-Files are submitted unchanged through the SDK; the app does not truncate or split at 2 GiB. Engine inspection limits still apply. Optional profile-controlled archive inspection is now available; see [its limits and behavior](archive-inspection.md). See the [PoC architecture](poc-architecture.md) for controls, diagrams and validation boundaries.
+Names support policy preview and early hold; captured archive signatures catch renamed archives before SDK submission. ZIP-based documents use the compressed-file cap. The SDK child also rejects compressed files above the cap. The app does not truncate or split eligible files. Native SDK archive inspection continues for eligible archives; optional local archive inspection remains disabled in the console.
 
 ![Large-file profile controls](images/profile-large-files.png)
 

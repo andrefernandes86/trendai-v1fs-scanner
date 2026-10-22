@@ -79,6 +79,10 @@ type Profile struct {
 	LargeFileTransfers          int            `json:"largeFileTransfers"`
 	Archive                     ArchiveOptions `json:"archive"`
 	MaxScanBytes                int64          `json:"maxScanBytes"`
+	MaxCompressedScanBytes      int64          `json:"maxCompressedScanBytes"`
+	CompressedOversizeAction    string         `json:"compressedOversizeAction"`
+	CompressedOversizeMount     string         `json:"compressedOversizeMount"`
+	CompressedOversizePrefix    string         `json:"compressedOversizePrefix"`
 	OversizeMount               string         `json:"oversizeMount"`
 	OversizePrefix              string         `json:"oversizePrefix"`
 	OversizeAction              string         `json:"oversizeAction"`
@@ -125,22 +129,23 @@ type Profile struct {
 	Revision            int64  `json:"revision"`
 }
 type Snapshot struct {
-	RuleDestinations   map[string]Mount `json:"ruleDestinations,omitempty"`
-	ManualAction       string           `json:"manualAction,omitempty"`
-	ExpectedDigest     string           `json:"expectedDigest,omitempty"`
-	CaptureSHA         string           `json:"captureSHA,omitempty"`
-	CaptureCRC         string           `json:"captureCRC,omitempty"`
-	ClaimedKey         string           `json:"claimedKey,omitempty"`
-	ClaimedETag        string           `json:"claimedETag,omitempty"`
-	Source             Mount            `json:"source"`
-	Good               Mount            `json:"good"`
-	Failed             Mount            `json:"failed"`
-	Bad                Mount            `json:"bad"`
-	Oversized          Mount            `json:"oversized"`
-	Scanner            Scanner          `json:"scanner"`
-	Profile            Profile          `json:"profile"`
-	Key, ETag, Version string
-	Size               int64
+	RuleDestinations    map[string]Mount `json:"ruleDestinations,omitempty"`
+	ManualAction        string           `json:"manualAction,omitempty"`
+	ExpectedDigest      string           `json:"expectedDigest,omitempty"`
+	CaptureSHA          string           `json:"captureSHA,omitempty"`
+	CaptureCRC          string           `json:"captureCRC,omitempty"`
+	ClaimedKey          string           `json:"claimedKey,omitempty"`
+	ClaimedETag         string           `json:"claimedETag,omitempty"`
+	Source              Mount            `json:"source"`
+	Good                Mount            `json:"good"`
+	Failed              Mount            `json:"failed"`
+	Bad                 Mount            `json:"bad"`
+	Oversized           Mount            `json:"oversized"`
+	CompressedOversized Mount            `json:"compressedOversized"`
+	Scanner             Scanner          `json:"scanner"`
+	Profile             Profile          `json:"profile"`
+	Key, ETag, Version  string
+	Size                int64
 }
 type Job struct {
 	Timings              map[string]float64 `json:"timingsSeconds,omitempty"`

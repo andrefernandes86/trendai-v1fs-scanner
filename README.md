@@ -110,3 +110,7 @@ Profile setup now follows six short steps with a final review. Cards expand on d
 See [wizard and monitoring validation](docs/validation/profile-wizard-20261020.md) for the current regression and live integration checks.
 
 ADLS Gen2 is available as a dedicated HTTPS storage integration alongside Blob, Azure Files, SMB and NFS. See [ADLS Gen2 setup and protocol choices](docs/adls-gen2.md).
+
+### Regular files and compressed files
+
+In **Scan profiles → Options → Large-file handling**, set independent limits and actions: regular files default to **100 GB**, compressed files to **2 GB** (decimal, using the archive's own size). Above-limit files are held by default or explicitly moved as **NOT SCANNED** to clean, scan-failed or another saved storage connection. A clean destination does not certify a bypassed file as safe. See [configuration and screenshots](docs/user-guide.md#configure-large-files).

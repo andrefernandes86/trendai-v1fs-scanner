@@ -358,7 +358,7 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	for _, s := range []string{p.Prefix, p.GoodPrefix, p.BadPrefix, p.FailedPrefix, p.OversizePrefix} {
+	for _, s := range []string{p.Prefix, p.GoodPrefix, p.BadPrefix, p.FailedPrefix, p.OversizePrefix, p.CompressedOversizePrefix} {
 		if s != "" && !core.ValidKey(s) {
 			problem(w, 400, "Invalid path prefix.")
 			return
@@ -407,6 +407,18 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if p.CompressedOversizeAction == "custom" {
+		var target Mount
+		if a.Get("mounts", p.CompressedOversizeMount, &target) != nil {
+			problem(w, 400, "Select an existing oversized compressed-file storage connection.")
+			return
+		}
+		if sameStorageRoot(mounts[0], target) {
+			problem(w, 400, "Compressed-file destination must differ from the source storage root.")
+			return
+		}
+	}
+
 	if p.Enabled {
 		var s Scanner
 		if a.Get("scanner", "default", &s) != nil || s.Validate() != nil {

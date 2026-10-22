@@ -51,6 +51,11 @@ func (a *App) ProfileSnapshot(id, key string) (Snapshot, error) {
 			return s, e
 		}
 	}
+	if s.Profile.CompressedOversizeAction == "custom" {
+		if e := a.Get("mounts", s.Profile.CompressedOversizeMount, &s.CompressedOversized); e != nil {
+			return s, e
+		}
+	}
 	if e := a.Get("scanner", "default", &s.Scanner); e != nil {
 		return s, errors.New("configure Vision One first")
 	}
@@ -424,7 +429,12 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		return
 	}
 	relative := strings.TrimPrefix(s.Key, s.Source.Prefix+s.Profile.Prefix)
-	action, rule := s.Profile.FilePolicy(relative, s.Size)
+	kind, kindErr := archiveKind(local, relative)
+	if kindErr != nil {
+		_ = a.transition(id, "HELD", "NOT_SCANNED", digest, "", "Could not determine file type; source retained.", 0)
+		return
+	}
+	action, rule := s.Profile.filePolicy(relative, s.Size, kind != "" || compressedFileName(relative))
 	if action == "hold" || action == "ignore" {
 		_ = a.transition(id, "HELD", "NOT_SCANNED", digest, "", "Policy "+action+": "+rule, 0)
 		return
@@ -433,13 +443,17 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		if action == "oversize_custom" {
 			s.Failed = s.Oversized
 			s.Profile.FailedPrefix = s.Profile.OversizePrefix
+			if rule == "compressed_size_limit" {
+				s.Failed = s.CompressedOversized
+				s.Profile.FailedPrefix = s.Profile.CompressedOversizePrefix
+			}
 		}
 		v := "OVERSIZED"
 		if action == "oversize_clean" {
 			v = "OVERSIZED_CLEAN"
 		}
-		a.Audit("scan.oversized", id, "NOT SCANNED; "+action)
-		a.routeCaptured(ctx, id, s, local, digest, v, rule, "Oversized file; NOT SCANNED; explicit profile action: "+action)
+		a.Audit("scan.oversized", id, "NOT SCANNED; "+rule+"; "+action)
+		a.routeCaptured(ctx, id, s, local, digest, v, rule, "Oversized file ("+rule+"); NOT SCANNED; explicit profile action: "+action)
 		return
 	}
 	if action == "route" {

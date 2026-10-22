@@ -340,6 +340,20 @@ func (a *App) ScanDirect(ctx context.Context, path string, s Scanner, p Profile)
 		}
 	}
 	defer a.scanMu.Unlock()
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > p.MaxCompressedScanSize() {
+		kind, err := archiveKind(path, scanIdentifier(ctx, path))
+		if err != nil {
+			return nil, err
+		}
+		if kind != "" || compressedFileName(scanIdentifier(ctx, path)) {
+			return nil, fmt.Errorf("compressed file exceeds maximum archive scan size (%d bytes); SDK submission blocked", p.MaxCompressedScanSize())
+		}
+	}
+
 	names := []string{"TM_AM_SERVER_ADDR", "TM_AM_DISABLE_TLS", "TM_AM_DISABLE_CERT_VERIFY", "TM_AM_AUTH_KEY_NOT_REQUIRED", "TM_AM_AUTH_KEY", "TM_AM_SCAN_TIMEOUT_SECS"}
 	old := map[string]*string{}
 	for _, n := range names {

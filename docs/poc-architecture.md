@@ -85,13 +85,15 @@ Exclusions and explicit oversized bypasses are **NOT SCANNED**. A clean destinat
 
 ## Large files and policy
 
-The app admits original files up to **100 GB decimal** by default, configurable downward. It does not split or truncate files before SDK submission. An SDK verdict does not prove that every byte/member of an arbitrarily large file was inspected: engine inspection, extraction and format limits apply. Optional profile-controlled ZIP/TAR/GZIP inspection supports up to 20 layers; see [archive inspection](archive-inspection.md).
+The app admits regular files up to **100 GB decimal** and compressed files up to **2 GB decimal** by default, both configurable downward. The archive limit measures the compressed input, not expanded contents. Oversized archives follow a separate hold/unscanned-move policy and never reach the SDK. It does not split or truncate files before SDK submission. An SDK verdict does not prove that every byte/member of an arbitrarily large file was inspected: engine inspection, extraction and format limits apply. Optional profile-controlled ZIP/TAR/GZIP inspection supports up to 20 layers; see [archive inspection](archive-inspection.md).
 
-In **Scan profiles → Edit profile → Large files & size policy**, configure:
+In **Scan profiles → Edit profile → Options → Large-file handling**, configure:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| Maximum scan file size | 100 GB | Files up to and including threshold are eligible for SDK scanning. |
+| Maximum regular-file scan size | 100 GB | Regular files up to and including this threshold are eligible for SDK scanning. |
+| Maximum compressed-file scan size | 2 GB | Archive bytes, not expanded bytes; can be lowered but never raised above 2 GB. |
+| Compressed files above scan-size limit | Hold at source | Choose an unscanned move to clean, scan failed or another saved destination/subfolder outside the source root. |
 | Files above scan-size limit | Hold at source | Alternatively move unscanned to clean or scan-failed storage, using that destination/prefix. |
 | Simultaneous large files | 1 | Cap for files at least 1 GB, within normal profile/global slots. Small queued files remain eligible. |
 | Maximum job duration | 21,600 seconds | Six hours per attempt; allowed range 60 seconds–48 hours. Includes capture, scan, copy and verification. SDK timeout follows this limit. |
@@ -107,7 +109,7 @@ Provision disk for concurrent captures plus history, logs, backups and free spac
 2. Configure cloud region or local scanner and test authentication.
 3. Enable automatic monitoring; upload safe and EICAR files to source.
 4. Confirm queue admission, recorded responses, tags, destinations and verified source removal.
-5. Upload a representative file above 2 GiB; record SDK outcome, timing and any engine limits.
+5. Test a regular file above 2 GB and an archive above 2 GB; confirm the archive follows its hold/unscanned routing policy without an SDK request.
 6. Use a smaller size limit on a separate test profile to test hold/unscanned routing without a 100 GB upload.
 7. Test outages, source changes, insufficient disk and container restart; verify preservation and durable retries.
 8. Export file activity, source inventory and audit. Record build/profile revision, scanner region/type, file sizes/hashes, timings, quotas and host resources.

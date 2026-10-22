@@ -179,7 +179,7 @@ The supervisor restarts the API and engine independently. `/livez` reports API/d
 
 ## Large files
 
-The old 2 GiB application cap is removed. Profiles default to 100 GB original-file SDK submission, one concurrent file at least 1 GB and a six-hour per-attempt deadline. See [profile controls and resource behavior](poc-architecture.md#large-files-and-policy). The scanner may inspect selected ranges and impose format/extraction limits; successful submission is not proof of exhaustive byte/member coverage.
+Profiles default to 100 GB for regular files and a separate 2 GB compressed-file limit (decimal archive bytes), one concurrent file at least 1 GB and a six-hour per-attempt deadline. Oversized compressed files default to hold, including legacy profiles; configure an explicit NOT SCANNED move action to route them elsewhere. Archives above the cap are not submitted to the SDK. See [profile controls and resource behavior](poc-architecture.md#large-files-and-policy). The scanner may inspect selected ranges and impose format/extraction limits; successful submission is not proof of exhaustive byte/member coverage.
 
 Use a persistent data disk with space for simultaneous captures, history and operational reserve. Capacity admission retains 5 GiB and defers capture when insufficient. The implementation conservatively also counts outstanding reservations, so it may wait before physically exhausting disk. Oversized routing still needs room to capture that file; changing the policy does not provision disk. A host with 170 GiB free cannot process two simultaneous 100 GB captures. Configure the large-file cap accordingly.
 

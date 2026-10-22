@@ -243,13 +243,21 @@ These are application planning estimates, not vendor-certified requirements. Clo
 
 ## Configure large files
 
-Open **Scan profiles → Edit profile → Options → Large-file handling**. Keep the default **100 GB maximum** to submit larger original files through the SDK. The app does not truncate at 2 GiB. Start with **Simultaneous large files = 1** and measure before increasing it. Set **Maximum job duration** to include capture, scan and verified routing (default six hours per attempt).
+Open **Scan profiles → Edit profile → Options → Large-file handling**. Regular files default to a **100 GB** maximum. Compressed files have a separate **2 GB** maximum, measured using the size of the archive itself, not its extracted contents. Both limits use decimal GB and can be lowered. The compressed-file limit cannot exceed 2,000,000,000 bytes.
 
-Above the threshold choose **Hold at source**, **Move to scan failed**, or **Move to clean — NOT SCANNED**. Both move options apply scanned=false, verdict=not_scanned and reason=oversized; neither generates a clean verdict. Use the scan-failed destination/prefix for an oversized review folder. Test actions with a small threshold on a dedicated profile. Moved files still require verified destination bytes before source removal.
+Choose an action independently for each type: **Hold at source**, **Move to scan failed**, **Move to clean — NOT SCANNED (bypass)**, or **Move to selected storage connection — NOT SCANNED**. Hold is the default for both new and existing profiles that have no compressed-file setting. A custom destination can use any saved connection outside the source storage root, with an optional subfolder.
 
-An SDK verdict does not prove every byte/member was inspected. Scanner inspection/extraction limits remain applicable; optional application extraction is available per profile. See [customer PoC diagrams and limits](poc-architecture.md).
+Files above their limit are never submitted to the SDK. A move to clean is an explicit bypass, never a CLEAN scan verdict. Moved files receive `scanned=false`, `verdict=not_scanned`, and `reason=oversized`. Normal capture, transfer, integrity, and conditional source-removal protections still apply. Holding a recognized archive at source avoids downloading it. A move requires room for the full local capture.
 
-![Configure large-file policies in the profile editor](images/profile-large-files.png)
+Classification uses common archive extensions and captured signatures, including ZIP, GZIP, TAR, RAR, 7z, BZIP2, XZ, Zstandard and CAB. ZIP-based documents such as DOCX and XLSX also use the compressed-file limit. Renamed archives recognized by their signatures are checked again after capture, and the SDK child has its own size guard. Explicit hold/ignore/move rules retain their existing precedence. A successful SDK verdict for an eligible archive does not prove every member was inspected.
+
+Start with **Simultaneous large files = 1**. **Maximum job duration** includes capture, scan and delivery (default six hours per attempt). Size policies apply to automatic discovery, manual source scans and queued snapshots; legacy profiles use the new 2 GB compressed-file default.
+
+![Separate regular and compressed-file policies](images/profile-large-files.png)
+
+![Select a destination for oversized compressed files](images/profile-compressed-routing.png)
+
+![Compressed-file bypass in dark mode](images/profile-large-files-dark.png)
 
 ## Inspect compressed files
 

@@ -95,6 +95,7 @@ func (a *App) resolveScanError(w http.ResponseWriter, r *http.Request) {
 	s.Profile.Rules = nil
 	s.Profile.Prefix = ""
 	s.Profile.OversizeAction = "hold"
+	s.Profile.CompressedOversizeAction = "hold"
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		problem(w, 500, "Cannot create request.")
