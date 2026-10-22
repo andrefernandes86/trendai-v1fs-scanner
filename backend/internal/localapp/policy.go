@@ -10,11 +10,13 @@ import (
 )
 
 type FileRule struct {
-	ID      string `json:"id"`
-	Pattern string `json:"pattern"`
-	Action  string `json:"action"`
-	MinSize int64  `json:"minSize"`
-	MaxSize int64  `json:"maxSize"`
+	DestinationMount  string `json:"destinationMount"`
+	DestinationPrefix string `json:"destinationPrefix"`
+	ID                string `json:"id"`
+	Pattern           string `json:"pattern"`
+	Action            string `json:"action"`
+	MinSize           int64  `json:"minSize"`
+	MaxSize           int64  `json:"maxSize"`
 }
 
 func globMatch(pattern, key string) bool {
@@ -41,7 +43,7 @@ func (p Profile) JobTimeout() time.Duration {
 }
 func (p Profile) FilePolicy(key string, size int64) (string, string) {
 	// Hold always wins over bypass. Rules are case-sensitive and operate on slash-normalized relative paths.
-	for _, action := range []string{"hold", "exclude"} {
+	for _, action := range []string{"hold", "exclude", "route"} {
 		for _, rule := range p.Rules {
 			if rule.Action == action && globMatch(rule.Pattern, key) && size >= rule.MinSize && (rule.MaxSize == 0 || size <= rule.MaxSize) {
 				return action, rule.ID
@@ -59,6 +61,8 @@ func (p Profile) FilePolicy(key string, size int64) (string, string) {
 			return "oversize_clean", "size_limit"
 		case "failed":
 			return "oversize_failed", "size_limit"
+		case "custom":
+			return "oversize_custom", "size_limit"
 		default:
 			return "hold", "oversized: exceeds profile maximum scan size"
 		}
@@ -66,6 +70,9 @@ func (p Profile) FilePolicy(key string, size int64) (string, string) {
 	return "scan", ""
 }
 func (p Profile) ReliabilityValidate() error {
+	if _, err := p.FailureTags(); err != nil {
+		return err
+	}
 	if _, err := p.SDKTags(); err != nil {
 		return err
 	}
@@ -78,7 +85,7 @@ func (p Profile) ReliabilityValidate() error {
 	if p.MaxScanBytes < 0 || p.MaxScanBytes > DefaultMaxScanBytes {
 		return fmt.Errorf("Maximum scan size must be 1–100 GB, or zero for 100 GB.")
 	}
-	if p.OversizeAction != "" && p.OversizeAction != "hold" && p.OversizeAction != "clean" && p.OversizeAction != "failed" {
+	if p.OversizeAction != "" && p.OversizeAction != "hold" && p.OversizeAction != "clean" && p.OversizeAction != "failed" && p.OversizeAction != "custom" {
 		return fmt.Errorf("Invalid oversized file action.")
 	}
 	if p.LargeFileScans < 0 || p.LargeFileScans > 8 {
@@ -104,8 +111,11 @@ func (p Profile) ReliabilityValidate() error {
 	}
 	ids := map[string]bool{}
 	for _, r := range p.Rules {
-		if r.ID == "" || ids[r.ID] || r.Pattern == "" || strings.Contains(r.Pattern, "\\") || strings.Contains(r.Pattern, "..") || strings.HasPrefix(r.Pattern, "/") || (r.Action != "hold" && r.Action != "exclude") || r.MinSize < 0 || r.MaxSize < 0 || (r.MaxSize != 0 && r.MinSize > r.MaxSize) {
+		if r.ID == "" || ids[r.ID] || r.Pattern == "" || strings.Contains(r.Pattern, "\\") || strings.Contains(r.Pattern, "..") || strings.HasPrefix(r.Pattern, "/") || (r.Action != "hold" && r.Action != "exclude" && r.Action != "route") || r.MinSize < 0 || r.MaxSize < 0 || (r.MaxSize != 0 && r.MinSize > r.MaxSize) {
 			return fmt.Errorf("Rules need unique IDs, relative slash-separated patterns, hold/exclude actions and valid sizes.")
+		}
+		if r.Action == "route" && r.DestinationMount == "" {
+			return fmt.Errorf("Select a storage connection for each move rule.")
 		}
 		ids[r.ID] = true
 	}

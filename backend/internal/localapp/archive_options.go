@@ -44,3 +44,13 @@ func (o ArchiveOptions) Validate() error {
 	}
 	return nil
 }
+
+// Retained for future review; production jobs use the SDK's native archive scan.
+const localArchiveInspectionAvailable = false
+
+func applyFeatureAvailability(p Profile) Profile {
+	if !localArchiveInspectionAvailable {
+		p.Archive.Enabled = false
+	}
+	return p
+}

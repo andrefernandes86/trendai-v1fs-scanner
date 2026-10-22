@@ -72,7 +72,10 @@ func routingTags(p Profile, verdict string) (map[string]string, error) {
 			return nil, err
 		}
 	} else {
-		tags = map[string]string{"scanned": "false", "verdict": "scan_failed", "scan-failed": "true"}
+		tags, err = p.FailureTags()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return tags, nil

@@ -55,3 +55,34 @@ func (p Profile) ResultTags(verdict string) (map[string]string, error) {
 	}
 	return result, nil
 }
+
+// FailureTags adds operator labels while preserving canonical failure evidence.
+func (p Profile) FailureTags() (map[string]string, error) {
+	result := map[string]string{}
+	for _, item := range strings.Split(p.FailedTags, ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(item, "=")
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		if !ok || len(k) < 1 || len(k) > 128 || len(v) > 256 || !tagText.MatchString(k) || !tagText.MatchString(v) {
+			return nil, fmt.Errorf("Scan-failed labels must be comma-separated key=value pairs.")
+		}
+		if k == "failure-stage" {
+			return nil, fmt.Errorf("failure-stage is set automatically.")
+		}
+		result[k] = v
+	}
+	for k, v := range map[string]string{"scan-failed": "true", "scanned": "false", "verdict": "scan_failed"} {
+		if old, ok := result[k]; ok && old != v {
+			return nil, fmt.Errorf("%s is reserved; expected %s for failed scans", k, v)
+		}
+		result[k] = v
+	}
+	if len(result) > 9 {
+		return nil, fmt.Errorf("Use at most 6 additional failure labels; room is reserved for scan-result and failure-stage labels.")
+	}
+	return result, nil
+}

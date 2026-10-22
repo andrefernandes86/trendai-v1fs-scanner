@@ -1,8 +1,11 @@
 # Compressed-file inspection
 
-## Enable and configure
+## Current status: hidden and disabled
 
-The SDK scans ZIP contents through the normal scan path without local extraction. For optional per-file inspection, open **Scan profiles → Edit profile → Protection → Additional archive inspection** and select **Enable additional archive inspection**. Entry count and total expanded size are the main controls; open **Advanced archive limits** for the remaining budgets. The option defaults to off for both new and existing profiles. Changes apply to newly queued job snapshots; existing queued/held work retains its original policy. Use a separate test profile or explicit resubmission to validate new settings.
+Additional local archive inspection is disabled for production jobs and hidden from the profile editor. The SDK continues scanning original ZIP files. Existing stored archive parameters and the implementation are retained for future review. API profile reads/saves report the feature disabled, and workers also disable it for older queued snapshots.
+
+The following sections describe retained implementation details, not currently available configuration.
+
 
 Supported extraction formats are ZIP/ZIP64 (stored/deflate methods), TAR and GZIP, including nested combinations. ZIP-based documents and packages are recognized by signature or supported extension. RAR, 7z, BZIP2, XZ, Zstandard, CAB and ISO are not extracted by this release. Detected unsupported archives fail closed when this option is enabled. With the option off, the original file continues through the normal SDK scan path.
 
@@ -18,7 +21,7 @@ Supported extraction formats are ZIP/ZIP64 (stored/deflate methods), TAR and GZI
 
 Defaults are conservative starting points, not a guarantee that every legitimate archive will fit. Highly compressible legitimate data can exceed a ratio limit; inspect the failure before increasing limits. Enabling 20 layers does not disable the other limits.
 
-![Archive profile controls](images/profile-archives.png)
+The earlier archive-controls screenshot is historical; those controls are no longer shown.
 
 ## Scan and routing behavior
 

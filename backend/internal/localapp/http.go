@@ -320,6 +320,7 @@ func (a *App) profiles(w http.ResponseWriter, r *http.Request) {
 	for i, raw := range p {
 		var profile Profile
 		if json.Unmarshal(raw, &profile) == nil {
+			profile = applyFeatureAvailability(profile)
 			profile.RecoveryEnabled = false
 			p[i], _ = json.Marshal(profile)
 		}
@@ -331,6 +332,7 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
+	p = applyFeatureAvailability(p)
 	p.RecoveryEnabled = false // Delivered files belong to the downstream application.
 	if p.ScanAttempts == 0 {
 		p.ScanAttempts = 4
@@ -356,7 +358,7 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	for _, s := range []string{p.Prefix, p.GoodPrefix, p.BadPrefix, p.FailedPrefix} {
+	for _, s := range []string{p.Prefix, p.GoodPrefix, p.BadPrefix, p.FailedPrefix, p.OversizePrefix} {
 		if s != "" && !core.ValidKey(s) {
 			problem(w, 400, "Invalid path prefix.")
 			return
@@ -375,6 +377,34 @@ func (a *App) profileSave(w http.ResponseWriter, r *http.Request) {
 				problem(w, 400, "Source, clean, malicious, and scan failed destinations must use distinct containers or shares.")
 				return
 			}
+		}
+	}
+	for _, rule := range p.Rules {
+		if rule.Action == "route" {
+			var target Mount
+			if a.Get("mounts", rule.DestinationMount, &target) != nil {
+				problem(w, 400, "Select an existing rule destination connection.")
+				return
+			}
+			if sameStorageRoot(mounts[0], target) {
+				problem(w, 400, "Rule destination must differ from source storage root.")
+				return
+			}
+			if rule.DestinationPrefix != "" && !core.ValidKey(rule.DestinationPrefix) {
+				problem(w, 400, "Invalid rule destination prefix.")
+				return
+			}
+		}
+	}
+	if p.OversizeAction == "custom" {
+		var target Mount
+		if a.Get("mounts", p.OversizeMount, &target) != nil {
+			problem(w, 400, "Select an existing oversized-file storage connection.")
+			return
+		}
+		if sameStorageRoot(mounts[0], target) {
+			problem(w, 400, "Oversized-file destination must differ from the source storage root.")
+			return
 		}
 	}
 	if p.Enabled {
@@ -538,7 +568,7 @@ func (a *App) status(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		return result
-	}(), "observedAt": stamp(), "mode": "local-host", "resources": containerResources(a.DataDir), "scannerService": a.scannerConnection(r.Context()), "engine": EngineHealth(a.DataDir), "workerLimit": a.ScanCapacity(), "scannerConfigured": func() bool { var s Scanner; return a.Get("scanner", "default", &s) == nil }()})
+	}(), "observedAt": stamp(), "mode": "local-host", "resources": a.resourceStatus(), "scannerService": a.scannerConnection(r.Context()), "engine": EngineHealth(a.DataDir), "workerLimit": a.ScanCapacity(), "scannerConfigured": func() bool { var s Scanner; return a.Get("scanner", "default", &s) == nil }()})
 }
 func (a *App) audit(w http.ResponseWriter, r *http.Request) {
 	rows, e := a.DB.Query("SELECT id,at,action,object_id,detail FROM audit WHERE action!='authThrottle.saved' ORDER BY id DESC LIMIT 300")

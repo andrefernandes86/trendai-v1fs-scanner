@@ -99,7 +99,7 @@ The tool checks that uploads have settled before admitting them. **How schedulin
 
 Choose **Predictive Machine Learning** and **Active Content Detection** according to your security policy. Open **Scan report preferences** for detailed responses, scanner file hashes and SPN feedback.
 
-The SDK scans ZIP contents automatically. **Additional archive inspection** is optional and off by default. Enable it for local extraction and per-file results; the main controls are entry count and total unpacked size. Other controls stay under **Advanced archive limits**. See [archive inspection](archive-inspection.md) for details.
+The SDK scans ZIP contents automatically. Additional local archive inspection is currently hidden and disabled; its implementation is retained for future review.
 
 ![Wizard step 4: detection and archive choices](images/profile-protection.png)
 
@@ -126,9 +126,9 @@ The defaults are ready to use. Open only the setting you want to customize:
 | Tags and labels | Vision One scan-event tags and separate storage-file labels. Scan status and verdict storage labels are automatic. |
 | Large-file handling | Scan size, large-file concurrency, timeout and the action for bigger files. Bypassed files are explicitly **NOT SCANNED**. |
 | Transfer speed | How many files are delivered together and Azure Blob upload tuning. |
+| Delivery verification | Optional full content comparison before source removal, separate from transfer-speed settings. |
 | Upload checks and retries | Quiet period, separate scan/copy/delete attempts, retry delay, temporary-file patterns and share ownership. |
-| Exclusions and hold rules | Optional path/size exceptions. Hold leaves files at source. Bypass routes them to clean storage as **NOT SCANNED** after integrity verification. Use Preview matches first. |
-| Destination handoff | Delivered files belong to the downstream application; no automatic recovery, rescan, retagging, movement or deletion after handoff. |
+| Exclusions and hold rules | Optional path/size exceptions. Hold leaves files at source. Move rules can select a saved storage connection and subfolder; bypassed files remain **NOT SCANNED**. Use Preview matches first. |
 
 ![Wizard step 5: optional settings stay collapsed](images/profile-options.png)
 
@@ -253,7 +253,7 @@ An SDK verdict does not prove every byte/member was inspected. Scanner inspectio
 
 ## Inspect compressed files
 
-In **Scan profiles → Edit profile → Protection → Additional archive inspection**, optionally enable local extraction and per-file results. The main settings are maximum entries and total expanded size; remaining limits are under **Advanced archive limits**. Defaults are off / 10 entries / 10 GB total; advanced defaults are 5 layers / 2 GB per member / 100× / 300 seconds / one inspection. Unsupported, encrypted, corrupt or over-budget archives never qualify as clean. The original and every extracted member must scan successfully before clean routing. [Step-by-step behavior, protections and testing](archive-inspection.md).
+ZIP archives follow the normal SDK scan path. Additional local extraction is hidden and disabled for all production jobs, including jobs with older enabled policy snapshots. The implementation and technical notes are retained for future review; see [archive inspection status](archive-inspection.md).
 
 ## Choose light or dark mode
 
@@ -295,7 +295,7 @@ Open **Audit log** to see saved configuration changes, processing decisions and 
 
 ![Audit log with demonstration configuration events](images/audit-log.png)
 
-Archive settings: **Maximum archive entries** defaults to **10** and accepts **10–100**. The count is shared across all archive layers, including directories and nested archive members.
+Local archive controls are hidden and disabled. Their implementation remains in source control for future review.
 
 Result tags automatically include `scan-failed=true` and `scanned=false` for incomplete archive inspections or unknown scans routed after exhausted retries. Incomplete archive scans are retried before routing to Scan failed; recorded malware detections remain available in the original scanner evidence. Complete clean/malicious scans receive `scan-failed=false`. Azure Blob stores native tags; shares store JSON sidecars. Existing destination objects are not retroactively retagged.
 
@@ -400,12 +400,40 @@ Storage labels are separate: Azure Blob uses native blob index tags; ADLS Gen2 u
 
 ## Container resources and service status
 
-The sidebar deployment card displays CPU allocation, memory usage/limit and data-disk used/total. CPU respects the container quota when available. **No limit** means no finite cgroup memory limit was found; it does not mean unlimited physical RAM. Disk figures cover the filesystem holding the data volume, which may be shared with other applications.
+Click the sidebar scanner card to expand or collapse its details. The compact header shows **SaaS scanner** or **Local scanner**, with green for connected and red for unavailable. The expanded card shows CPU allocation and utilization, memory used/total plus available memory, disk used/total, engine state and scanner connection latency. Expansion preference is saved in this browser.
 
-**V1FS engine** uses its heartbeat. **SDK endpoint** reports a cached TCP/TLS connectivity check (up to 30 seconds old), not API-key authentication or a successful scan. Use **Vision One config → Test API key** for a real SDK validation. Service checks do not submit files or change storage.
+Memory total uses the container's finite cgroup limit, capped at host RAM; without a dedicated limit it uses host RAM. CPU utilization is normalized to the available container CPU allocation and requires two samples. Resource measurements refresh every five seconds while expanded.
+
+**V1FS engine** uses its heartbeat. **SDK endpoint** and latency use a cached TCP/TLS connection check (up to 30 seconds old). This measures connectivity, not API-key authentication or full scan duration. Use **Vision One config → Test API key** for a real SDK validation. Disk totals describe the data-volume filesystem.
+
+![Expanded scanner card with resource usage and connection latency](images/container-status.png)
 
 ## Setup guide
 
 Use **Setup guide** in the top bar for the workflow diagram and the storage/scanner/profile checklist. They have moved off Overview, which focuses on current activity, counts and files needing attention.
 
 ![Workflow and checklist in the separate setup guide](images/setup-guide.png)
+
+## Failure labels and selected destinations
+
+Under **Options → Tags and labels → Scan-failed storage labels**, add your own failure flag, for example `processing-status=failed,review=required`. These extra labels apply to scan-failed deliveries and retained sources after download/copy/scan retry exhaustion. Standard `scan-failed=true`, `scanned=false` and the failure verdict remain automatic for unknown scans; custom labels cannot contradict them. A confirmed malware/clean result is not erased by a later copy failure. Up to six custom failure labels leave room for required result/failure-stage tags.
+
+In **Large-file handling**, choose **Hold at source** to leave oversized files untouched, or **Move to selected storage connection — NOT SCANNED** to choose a saved destination and optional subfolder. The destination must be outside the source storage root. This is an explicit bypass, not a clean scan result.
+
+For **Exclusions and hold rules**, choose **Hold at source**, the existing clean bypass, or **Move to selected storage — NOT SCANNED**. Move rules offer a saved connection and subfolder. Hold rules take precedence. Files moved by rule retain `scanned=false` and an excluded verdict; they are not certified clean.
+
+## Delivery verification
+
+Open **Options → Delivery verification**. With **Compare delivered file contents (recommended)** on, the app reads the delivered file before source removal and compares SHA-256/CRC32C with the captured input. Off skips this full content readback, reducing network traffic, while retaining upload completion, size/identity checks and source checksums. Scanning and result labels run in both modes.
+
+![Delivery verification in its own Options section](images/delivery-verification.png)
+
+## Uploads on slower networks
+
+New profiles start with **10-second source checks**, a **120-second unchanged-upload wait**, and a **30-second base delay for storage retries**. Existing saved values are preserved. The check frequency and quiet period serve different purposes: frequent checks discover files; the quiet period waits for an unchanged identity.
+
+A longer wait reduces early pickup after a temporary upload pause but does not establish that an uploader has finished. Prefer publishing only completed files, for example by uploading under a temporary name excluded from scanning and then renaming. Scan retries remain three retries after the first attempt, one minute apart; storage retry delays use their own increasing schedule.
+
+**Show a slow-processing warning after (minutes)** is a dashboard warning threshold, measured from job submission including queue, scan, delivery and retry time. The default **60 minutes** means one hour. It neither stops a job nor sends email. The per-attempt job timeout is separate.
+
+**Confirm exclusive file-share writes during delivery** applies only to Azure Files, SMB or NFS destinations. Enable it only when no other application can overwrite, rename or delete the file until delivery and source cleanup finish. Otherwise leave it off; share delivery is held. Blob/ADLS Gen2 use leases and do not require this confirmation. Downstream lifecycle management is permitted after handoff.

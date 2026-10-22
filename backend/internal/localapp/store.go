@@ -19,6 +19,10 @@ import (
 )
 
 type App struct {
+	resourceMu      sync.Mutex
+	resourceAt      time.Time
+	resourceUsec    uint64
+	resourcePercent *float64
 	serviceMu       sync.Mutex
 	serviceKey      string
 	serviceAt       time.Time
@@ -75,6 +79,8 @@ type Profile struct {
 	LargeFileTransfers          int            `json:"largeFileTransfers"`
 	Archive                     ArchiveOptions `json:"archive"`
 	MaxScanBytes                int64          `json:"maxScanBytes"`
+	OversizeMount               string         `json:"oversizeMount"`
+	OversizePrefix              string         `json:"oversizePrefix"`
 	OversizeAction              string         `json:"oversizeAction"`
 	LargeFileScans              int            `json:"largeFileScans"`
 	JobTimeoutSeconds           int            `json:"jobTimeoutSeconds"`
@@ -99,6 +105,7 @@ type Profile struct {
 	VisionOneTags       string `json:"visionOneTags"`
 	ScannedTags         string `json:"scannedTags"`
 	CleanTags           string `json:"cleanTags"`
+	FailedTags          string `json:"failedTags"`
 	MaliciousTags       string `json:"maliciousTags"`
 	ID                  string `json:"id"`
 	Name                string `json:"name"`
@@ -118,18 +125,20 @@ type Profile struct {
 	Revision            int64  `json:"revision"`
 }
 type Snapshot struct {
-	ManualAction       string  `json:"manualAction,omitempty"`
-	ExpectedDigest     string  `json:"expectedDigest,omitempty"`
-	CaptureSHA         string  `json:"captureSHA,omitempty"`
-	CaptureCRC         string  `json:"captureCRC,omitempty"`
-	ClaimedKey         string  `json:"claimedKey,omitempty"`
-	ClaimedETag        string  `json:"claimedETag,omitempty"`
-	Source             Mount   `json:"source"`
-	Good               Mount   `json:"good"`
-	Failed             Mount   `json:"failed"`
-	Bad                Mount   `json:"bad"`
-	Scanner            Scanner `json:"scanner"`
-	Profile            Profile `json:"profile"`
+	RuleDestinations   map[string]Mount `json:"ruleDestinations,omitempty"`
+	ManualAction       string           `json:"manualAction,omitempty"`
+	ExpectedDigest     string           `json:"expectedDigest,omitempty"`
+	CaptureSHA         string           `json:"captureSHA,omitempty"`
+	CaptureCRC         string           `json:"captureCRC,omitempty"`
+	ClaimedKey         string           `json:"claimedKey,omitempty"`
+	ClaimedETag        string           `json:"claimedETag,omitempty"`
+	Source             Mount            `json:"source"`
+	Good               Mount            `json:"good"`
+	Failed             Mount            `json:"failed"`
+	Bad                Mount            `json:"bad"`
+	Oversized          Mount            `json:"oversized"`
+	Scanner            Scanner          `json:"scanner"`
+	Profile            Profile          `json:"profile"`
 	Key, ETag, Version string
 	Size               int64
 }

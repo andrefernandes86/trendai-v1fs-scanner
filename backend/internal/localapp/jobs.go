@@ -21,6 +21,7 @@ func (a *App) ProfileSnapshot(id, key string) (Snapshot, error) {
 	if e := a.Get("profiles", id, &s.Profile); e != nil {
 		return s, e
 	}
+	s.Profile = applyFeatureAvailability(s.Profile)
 	if e := a.Get("mounts", s.Profile.SourceMount, &s.Source); e != nil {
 		return s, e
 	}
@@ -32,6 +33,21 @@ func (a *App) ProfileSnapshot(id, key string) (Snapshot, error) {
 	}
 	if s.Profile.FailedMount != "" {
 		if e := a.Get("mounts", s.Profile.FailedMount, &s.Failed); e != nil {
+			return s, e
+		}
+	}
+	s.RuleDestinations = map[string]Mount{}
+	for _, rule := range s.Profile.Rules {
+		if rule.Action == "route" {
+			var target Mount
+			if err := a.Get("mounts", rule.DestinationMount, &target); err != nil {
+				return s, err
+			}
+			s.RuleDestinations[rule.ID] = target
+		}
+	}
+	if s.Profile.OversizeAction == "custom" {
+		if e := a.Get("mounts", s.Profile.OversizeMount, &s.Oversized); e != nil {
 			return s, e
 		}
 	}
@@ -306,6 +322,7 @@ func (a *App) workerNamed(ctx context.Context, name string, retirement ...<-chan
 			}
 			continue
 		}
+		s.Profile = applyFeatureAvailability(s.Profile)
 		func() {
 			done := make(chan struct{})
 			go func() {
@@ -412,13 +429,34 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		_ = a.transition(id, "HELD", "NOT_SCANNED", digest, "", "Policy "+action+": "+rule, 0)
 		return
 	}
-	if action == "oversize_clean" || action == "oversize_failed" {
+	if action == "oversize_clean" || action == "oversize_failed" || action == "oversize_custom" {
+		if action == "oversize_custom" {
+			s.Failed = s.Oversized
+			s.Profile.FailedPrefix = s.Profile.OversizePrefix
+		}
 		v := "OVERSIZED"
 		if action == "oversize_clean" {
 			v = "OVERSIZED_CLEAN"
 		}
 		a.Audit("scan.oversized", id, "NOT SCANNED; "+action)
 		a.routeCaptured(ctx, id, s, local, digest, v, rule, "Oversized file; NOT SCANNED; explicit profile action: "+action)
+		return
+	}
+	if action == "route" {
+		target, ok := s.RuleDestinations[rule]
+		if !ok || target.ID == "" {
+			_ = a.transition(id, "HELD", "NOT_SCANNED", digest, "", "Rule destination unavailable in this job snapshot.", 0)
+			return
+		}
+		for _, r := range s.Profile.Rules {
+			if r.ID == rule {
+				s.Profile.GoodPrefix = r.DestinationPrefix
+				break
+			}
+		}
+		s.Good = target
+		a.Audit("scan.rule-route", id, "NOT SCANNED; rule "+rule)
+		a.routeCaptured(ctx, id, s, local, digest, "EXCLUDED", rule, "NOT SCANNED; moved by explicit rule to selected storage.")
 		return
 	}
 	if action == "exclude" {

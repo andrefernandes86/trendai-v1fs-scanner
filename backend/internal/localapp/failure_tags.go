@@ -28,7 +28,15 @@ func (a *App) tagExhaustedSource(id, stage, verdict string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	tags := map[string]string{"scan-failed": "true", "failure-stage": stage}
+	tags, err := s.Profile.FailureTags()
+	if err != nil {
+		return err
+	}
+	tags["failure-stage"] = stage
+	if verdict == "CLEAN" || verdict == "MALICIOUS" {
+		delete(tags, "scanned")
+		delete(tags, "verdict")
+	}
 	if verdict != "CLEAN" && verdict != "MALICIOUS" {
 		tags["scanned"] = "false"
 	}

@@ -82,3 +82,5 @@ flowchart LR
 ## Guided console
 
 The profile editor has six client-side steps: Source, Destinations, Schedule, Protection, Options and Review. Its draft is retained across steps, all fields are validated before save, and technical settings are disclosed on demand. The backend profile schema and processing rules are unchanged by the wizard. Overview scan-issue totals and File activity use one shared SQL predicate so the displayed count and filtered list agree, including hidden history when explicitly opened from a card.
+
+Local archive extraction is retained in code but disabled by feature availability at API profile read/save, source snapshot creation and worker dispatch. Legacy enabled snapshots cannot activate it in production; normal SDK archive scanning continues. Explicit rule and oversized-file routing snapshots include the selected destination credentials, preserve NOT SCANNED labels and use the normal verified delivery pipeline.

@@ -36,3 +36,19 @@ func TestScannerConnectionReportsTransportOnly(t *testing.T) {
 		t.Fatal(r)
 	}
 }
+
+func TestCPUUtilizationIsRelativeToContainerAllocation(t *testing.T) {
+	if got := cpuUtilization(500000, 1, 2); got != 25 {
+		t.Fatal(got)
+	}
+	if got := cpuUtilization(9000000, 1, 2); got != 100 {
+		t.Fatal(got)
+	}
+	if got := cpuUtilization(100, 0, 2); got != 0 {
+		t.Fatal(got)
+	}
+	r := containerResources(t.TempDir())
+	if r["memoryTotalBytes"].(uint64) == 0 {
+		t.Fatal("missing effective memory total")
+	}
+}
