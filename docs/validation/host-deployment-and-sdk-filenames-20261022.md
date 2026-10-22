@@ -21,3 +21,11 @@ The new fixture initially expected an incorrect byte count; corrected it to deri
 The Publish container workflow builds the clean repository Dockerfile for Linux amd64. It publishes `latest` and `sha-FULL_COMMIT_SHA` after successful main-branch push CI or an explicit manual dispatch. Pull-request/fork workflow runs cannot publish. Login uses only the Actions-provided token, with contents-read/packages-write permissions. The image does not mount or copy production data.
 
 GHCR package visibility must be verified separately from successful upload. GitHub documents that newly published packages default to private. A public source repository does not establish anonymous image access. See the publication instructions in the operations guide.
+
+## Published image verification
+
+The initial publication passed in GitHub Actions run [39791381583](https://github.com/andrefernandes86/trendai-v1fs-scanner/actions/runs/39791381583), and the corresponding full build/correctness run [39791301877](https://github.com/andrefernandes86/trendai-v1fs-scanner/actions/runs/39791301877) passed. GitHub reported the package visibility as **public**. Pulled `ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest` with a new empty Docker configuration and no registry login.
+
+Verified initial published digest: `sha256:ce9c380e4e45523e0c7bd50ca31ccbc3d4ba21f65c09e9adfb05a1b2f06aefa9`, source revision `1e2716f9c2c44ca1bba4cccc3812ccd5618a3c4e`. The `latest` tag may move on subsequent successful main-branch publications; use the digest or commit-specific tag to reproduce this image.
+
+Started the anonymously pulled image with the documented security restrictions and the isolated existing host bind directory. Its health check passed, and the previous administrator login and saved connection remained available. The live host deployment also passed health after installing the original-filename and RAM-ceiling changes.

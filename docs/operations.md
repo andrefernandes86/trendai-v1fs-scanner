@@ -102,7 +102,7 @@ Then use `https://HOST_IP:8095` with a certificate valid for the hostname/IP you
 
 ### Compose alternative — use instead of Docker run
 
-Run this from the repository directory. It uses the **same host directory**, not the default named volume. Docker Compose must support the `!override` volume syntax in `compose.host.yaml`.
+Obtain the Compose files first with `git clone https://github.com/andrefernandes86/trendai-v1fs-scanner.git` and `cd trendai-v1fs-scanner` (or enter your existing checkout). This alternative uses the **same host directory**, not the default named volume. Docker Compose must support the `!override` volume syntax in `compose.host.yaml`.
 
 ```bash
 export V1FS_HOST_DATA_DIR=/srv/trendai-v1fs-data
