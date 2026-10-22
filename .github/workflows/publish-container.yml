@@ -47,8 +47,25 @@ jobs:
             org.opencontainers.image.revision=${{ steps.release.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Build and publish Bash variant
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: bash
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/andrefernandes86/trendai-v1fs-scanner:bash
+            ghcr.io/andrefernandes86/trendai-v1fs-scanner:bash-sha-${{ steps.release.outputs.sha }}
+          labels: |
+            org.opencontainers.image.title=TrendAI Vision One File Security Scanner (Bash)
+            org.opencontainers.image.source=https://github.com/andrefernandes86/trendai-v1fs-scanner
+            org.opencontainers.image.revision=${{ steps.release.outputs.sha }}
+          cache-from: type=gha,scope=bash
+          cache-to: type=gha,scope=bash,mode=max
       - name: Record published image
         run: |
           echo 'Image: ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Bash variant: ghcr.io/andrefernandes86/trendai-v1fs-scanner:bash' >> "$GITHUB_STEP_SUMMARY"
           echo 'Platform: linux/amd64' >> "$GITHUB_STEP_SUMMARY"
           echo 'For a new GHCR package, set package visibility to Public in GitHub package settings and verify an anonymous pull.' >> "$GITHUB_STEP_SUMMARY"

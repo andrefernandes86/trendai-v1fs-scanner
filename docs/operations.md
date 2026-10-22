@@ -202,3 +202,28 @@ Transfer workers follow saved profile limits (1–10) live, independently of sca
 The **Publish container** GitHub Actions workflow builds the clean repository Dockerfile after a successful **Build and correctness** run on `main`, or when manually dispatched. It publishes `latest` and `sha-FULL_COMMIT_SHA` to GHCR using the workflow's `GITHUB_TOKEN` with `packages: write`; no registry password belongs in source.
 
 For the first publication, the package owner must set **Package settings → Change visibility → Public**. Repository visibility does not by itself make a new container package public. Verify access with `docker --config /tmp/empty-docker-config pull ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest` using an empty Docker configuration. See [GitHub container registry visibility](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+## Bash-enabled image
+
+Use `ghcr.io/andrefernandes86/trendai-v1fs-scanner:bash` when an interactive shell is needed. It runs the same scanner, remains non-root by default, and includes `/bin/bash`, curl and process tools. The standard `latest` image remains shell-free. Both variants require durable data storage for retained state.
+
+```bash
+docker pull ghcr.io/andrefernandes86/trendai-v1fs-scanner:bash
+```
+
+Use the full deployment command above with `:bash` as the image tag. Leave the scanner startup command unchanged; Bash is an additional exec session, not the container's main command.
+
+On ACI, use **Containers → Connect → /bin/bash → Connect**, or run this from Azure Cloud Shell:
+
+```bash
+az container exec \
+  --resource-group YOUR_RESOURCE_GROUP \
+  --name YOUR_CONTAINER_GROUP \
+  --exec-command /bin/bash
+```
+
+Application logs remain available through the Azure **Logs** tab or `az container logs --resource-group YOUR_RESOURCE_GROUP --name YOUR_CONTAINER_GROUP --follow`.
+
+**Existing ACI default-storage deployments:** switching images requires a lifecycle operation that can lose local state. Back up the existing `/data` before replacing that container. Do not assume a Bash image makes ACI's default storage persistent.
+
+For a source build: `docker build --target bash -t scanner:bash .`. A build without `--target bash` still produces the standard minimal image.

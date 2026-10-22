@@ -38,7 +38,7 @@ Overview shows Pending scans, Scanning now and rolling minute/hour/day/30-day co
 
 ## Deploy with data kept on the host
 
-Published image: `ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest` (Linux amd64).
+Published image: `ghcr.io/andrefernandes86/trendai-v1fs-scanner:latest` (Linux amd64). Use `ghcr.io/andrefernandes86/trendai-v1fs-scanner:bash` for the [optional interactive Bash variant](docs/operations.md#bash-enabled-image).
 
 Follow the [container deployment guide](docs/operations.md#container-first-host-deployment). It includes complete Docker `-v /srv/trendai-v1fs-data:/data` and Compose commands, UID/GID permissions, health checks, upgrades, backup and restore.
 
