@@ -138,3 +138,43 @@ func TestResubmitUsesClaimedShareLocation(t *testing.T) {
 		t.Fatal(m, err, state, message)
 	}
 }
+
+func TestExplicitResubmitUsesCurrentScanner(t *testing.T) {
+	a, s, _ := reliabilityFixture(t)
+	s.Scanner = Scanner{Type: "local", Address: "old-host:80"}
+	parent, _ := a.insertJob(s)
+	_ = a.transition(parent, "HELD", "UNKNOWN", "", "", "offline", 0)
+	current := Scanner{Type: "cloud", Region: "us-east-1", APIKey: "test-key"}
+	if err := a.Save("scanner", "default", current); err != nil {
+		t.Fatal(err)
+	}
+	code, result := resolveRequest(t, a, parent, "rescan")
+	if code != 200 {
+		t.Fatal(code, result)
+	}
+	_, snap, _, err := a.claim()
+	if err != nil || snap.Scanner != current {
+		t.Fatal("resubmit reused old scanner", err, snap.Scanner.Type)
+	}
+}
+func TestExplicitRetryUsesCurrentScanner(t *testing.T) {
+	a, s, _ := reliabilityFixture(t)
+	s.Scanner = Scanner{Type: "local", Address: "old-host:80"}
+	id, _ := a.insertJob(s)
+	_ = a.transition(id, "HELD", "UNKNOWN", "", "", "offline", 0)
+	current := Scanner{Type: "cloud", Region: "us-east-1", APIKey: "test-key"}
+	if err := a.Save("scanner", "default", current); err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest("POST", "/api/jobs/"+id+"/retry", nil)
+	r.SetPathValue("id", id)
+	w := httptest.NewRecorder()
+	a.retryJob(w, r)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	_, snap, _, err := a.claim()
+	if err != nil || snap.Scanner != current {
+		t.Fatal("retry reused old scanner", err, snap.Scanner.Type)
+	}
+}

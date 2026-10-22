@@ -474,6 +474,14 @@ func (a *App) retryJob(w http.ResponseWriter, r *http.Request) {
 		problem(w, 500, "Cannot read retry policy.")
 		return
 	}
+	var current Scanner
+	if a.Get("scanner", "default", &current) == nil {
+		if current.Validate() != nil {
+			problem(w, 409, "Configure a valid scanner before retrying.")
+			return
+		}
+		snap.Scanner = current
+	}
 	snap.Profile.ScanAttempts = 4
 	sealed, err := a.Seal(snap)
 	if err != nil {

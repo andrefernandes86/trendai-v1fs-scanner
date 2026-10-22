@@ -36,6 +36,16 @@ func (a *App) resolveScanError(w http.ResponseWriter, r *http.Request) {
 	if a.Get("profiles", s.Profile.ID, &policy) == nil {
 		s.Profile = policy
 	}
+	if req.Action == "rescan" {
+		var current Scanner
+		if a.Get("scanner", "default", &current) == nil {
+			if current.Validate() != nil {
+				problem(w, 409, "Configure a valid scanner before resubmitting.")
+				return
+			}
+			s.Scanner = current
+		}
+	}
 	s.Profile.ScanAttempts = 4
 	s.CaptureSHA = ""
 	s.CaptureCRC = ""

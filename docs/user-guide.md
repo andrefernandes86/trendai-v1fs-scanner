@@ -355,7 +355,7 @@ In **Scan profiles → Options → Transfer speed**, **Simultaneous transfers** 
 
 ## Resolve scan errors
 
-The default is **one initial scan plus three retries**, waiting **60 seconds between scan attempts**. Scanner exceptions and incomplete archive coverage follow this schedule before delivery to Scan failed. Storage-copy/download retries have separate limits and delays. The profile's maximum scan-attempt setting includes the first attempt; use **4** for three retries. Manual resubmission starts a fresh four-attempt budget.
+The default is **one initial scan plus three retries**, waiting **60 seconds between scan attempts**. Scanner exceptions and incomplete archive coverage follow this schedule before delivery to Scan failed. Storage-copy/download retries have separate limits and delays. The profile's maximum scan-attempt setting includes the first attempt; use **4** for three retries. Manual resubmission starts a fresh four-attempt budget. **Retry** and **Resubmit for scanning** use the currently saved Vision One scanner endpoint, region and credentials, so changing from a local scanner to cloud takes effect for the requested scan. Existing file identity and historical scan evidence remain unchanged.
 
 Click **Scan errors** on Overview, then **Resubmit / move…** beside a held or retrying unknown result:
 
