@@ -400,9 +400,9 @@ Storage labels are separate: Azure Blob uses native blob index tags; ADLS Gen2 u
 
 ## Container resources and service status
 
-Click the sidebar scanner card to expand or collapse its details. The compact header shows **SaaS scanner** or **Local scanner**, with green for connected and red for unavailable. The expanded card shows CPU allocation and utilization, container RAM usage and limit, shared host RAM total and available memory, disk used/total, engine state and scanner connection latency. Expansion preference is saved in this browser.
+Click the sidebar scanner card to expand or collapse its details. The compact header shows **SaaS scanner** or **Local scanner**, with green for connected and red for unavailable. The expanded card shows CPU allocation and utilization, container RAM usage and effective ceiling, shared host RAM total and available memory, disk used/total, engine state and scanner connection latency. Expansion preference is saved in this browser.
 
-A container RAM limit of **No limit** means memory is shared with other host workloads. Host available RAM is an estimate, not memory reserved for this container. Container usage includes cgroup-charged cached file data. CPU utilization is normalized to the available container CPU allocation and requires two samples. Resource measurements refresh every five seconds while expanded.
+The **Container RAM ceiling** is the lower of the configured container limit and physical host RAM. With no dedicated limit, the host total is shown with **(shared)** because the OS and other workloads also use that RAM. Host available RAM is an estimate, not memory reserved for this container. Container usage includes cgroup-charged cached file data. CPU utilization is normalized to the available container CPU allocation and requires two samples. Resource measurements refresh every five seconds while expanded.
 
 **V1FS engine** uses its heartbeat. **SDK endpoint** and latency use a cached TCP/TLS connection check (up to 30 seconds old). This measures connectivity, not API-key authentication or full scan duration. Use **Vision One config → Test API key** for a real SDK validation. Disk totals describe the data-volume filesystem.
 
