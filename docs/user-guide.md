@@ -394,15 +394,15 @@ Open **Scan profiles → Edit profile → Options → Tags and labels**.
 
 Vision One accepts **8 tags per scan**, each up to **63 bytes** in the Go SDK (63 ASCII characters). The app reserves two for `app:trendai-v1fs` and `profile:<profile-name>`, leaving **6 custom tags**. The automatic profile tag uses the saved profile name (up to 55 bytes), for example `profile:Deloitte Demo`. These describe the scan request; they are not malware names or verdicts. They are sent when the scan runs, not retroactively added to older Vision One results. See [Trend's Go SDK tag reference](https://docs.trendmicro.com/en-us/documentation/article/trend-vision-one-pml-file-sec-sdk).
 
-Storage labels are separate: Azure Blob uses native blob index tags; ADLS Gen2 uses metadata for delivered files; Azure Files, SMB and NFS use JSON sidecar files. Azure Files has no native blob index tags. The app adds `scanned`, `verdict` and `scan-failed` according to the recorded outcome. These storage labels do not populate the Vision One Tags column.
+Storage labels are separate: Azure Blob uses native blob index tags; ADLS Gen2 uses metadata for delivered files; Azure Files, SMB and NFS use JSON sidecar files. Azure Files has no native blob index tags. The app adds scan-result evidence and the configured failure labels according to the recorded outcome. These storage labels do not populate the Vision One Tags column.
 
 ![Separate Vision One scan tags and storage file labels](images/profile-tags.png)
 
 ## Container resources and service status
 
-Click the sidebar scanner card to expand or collapse its details. The compact header shows **SaaS scanner** or **Local scanner**, with green for connected and red for unavailable. The expanded card shows CPU allocation and utilization, memory used/total plus available memory, disk used/total, engine state and scanner connection latency. Expansion preference is saved in this browser.
+Click the sidebar scanner card to expand or collapse its details. The compact header shows **SaaS scanner** or **Local scanner**, with green for connected and red for unavailable. The expanded card shows CPU allocation and utilization, container RAM usage and limit, shared host RAM total and available memory, disk used/total, engine state and scanner connection latency. Expansion preference is saved in this browser.
 
-Memory total uses the container's finite cgroup limit, capped at host RAM; without a dedicated limit it uses host RAM. CPU utilization is normalized to the available container CPU allocation and requires two samples. Resource measurements refresh every five seconds while expanded.
+A container RAM limit of **No limit** means memory is shared with other host workloads. Host available RAM is an estimate, not memory reserved for this container. Container usage includes cgroup-charged cached file data. CPU utilization is normalized to the available container CPU allocation and requires two samples. Resource measurements refresh every five seconds while expanded.
 
 **V1FS engine** uses its heartbeat. **SDK endpoint** and latency use a cached TCP/TLS connection check (up to 30 seconds old). This measures connectivity, not API-key authentication or full scan duration. Use **Vision One config → Test API key** for a real SDK validation. Disk totals describe the data-volume filesystem.
 
@@ -422,9 +422,13 @@ In **Large-file handling**, choose **Hold at source** to leave oversized files u
 
 For **Exclusions and hold rules**, choose **Hold at source**, the existing clean bypass, or **Move to selected storage — NOT SCANNED**. Move rules offer a saved connection and subfolder. Hold rules take precedence. Files moved by rule retain `scanned=false` and an excluded verdict; they are not certified clean.
 
+Scan-failed storage labels default to `verdict=scan_failed`. The configured key=value pairs are the flags applied automatically; no separate `scan-failed=true` flag is added. Incomplete scans retain `scanned=false`.
+
 ## Delivery verification
 
 Open **Options → Delivery verification**. With **Compare delivered file contents (recommended)** on, the app reads the delivered file before source removal and compares SHA-256/CRC32C with the captured input. Off skips this full content readback, reducing network traffic, while retaining upload completion, size/identity checks and source checksums. Scanning and result labels run in both modes.
+
+Verification adds one full destination read and approximately one file’s size in extra network traffic. For example, 10 GB at 100 MB/s takes about 100 seconds before overhead. Slow links, storage and concurrent transfers can take longer. Source removal and release of the transfer slot wait for verification.
 
 ![Delivery verification in its own Options section](images/delivery-verification.png)
 
@@ -438,8 +442,4 @@ A longer wait reduces early pickup after a temporary upload pause but does not e
 
 **Confirm exclusive file-share writes during delivery** applies only to Azure Files, SMB or NFS destinations. Enable it only when no other application can overwrite, rename or delete the file until delivery and source cleanup finish. Otherwise leave it off; share delivery is held. Blob/ADLS Gen2 use leases and do not require this confirmation. Downstream lifecycle management is permitted after handoff.
 
-Scan-failed storage labels default to `verdict=scan_failed`. The configured key=value pairs are the failure flags applied automatically; no separate `scan-failed=true` flag is added. Incomplete scans retain `scanned=false`.
-
-Delivery verification adds a full destination read, approximately one file’s size in extra network traffic, and checksum processing. For example, reading 10 GB at 100 MB/s takes about 100 seconds before overhead. Slow links, storage and simultaneous transfers can increase this time; source cleanup and release of the transfer slot wait for verification.
-
-The expanded scanner card separates **Container RAM used**, **Container RAM limit**, **Host RAM total**, and **Host RAM available**. A container with no memory limit shares host RAM; host available memory is an estimate across all workloads, not a reservation. Container usage includes memory charged to its cgroup, including cached file data.
+![Upload wait and retry settings](images/upload-checks-retries.png)
