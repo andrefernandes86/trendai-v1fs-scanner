@@ -154,9 +154,26 @@ func EngineHealth(data string) map[string]any {
 	return v
 }
 func (a *App) PublishEngineHealth(ctx context.Context) {
+	// Health must not wait behind claims, transfers, or configuration writes on
+	// the engine's single writer connection. WAL permits this independent reader.
+	var reader *App
+	defer func() {
+		if reader != nil {
+			reader.Close()
+		}
+	}()
 	publish := func() {
-		checks, healthy := a.liveStatus(ctx)
-		b, _ := json.Marshal(map[string]any{"healthy": healthy, "checks": checks, "observedAt": stamp(), "pid": os.Getpid(), "workerLimit": a.ScanCapacity(), "transferWorkerLimit": a.TransferCapacity()})
+		checks := map[string]any{"database": "unresponsive"}
+		healthy, workers, transfers := false, 0, 0
+		if reader == nil {
+			reader, _ = OpenReadOnly(a.DataDir)
+		}
+		if reader != nil {
+			workers, transfers = reader.ScanCapacity(), reader.TransferCapacity()
+			checks, healthy = a.liveStatusWithDB(ctx, reader.DB)
+		}
+		// Stamp after collecting metadata so queueing cannot age a new heartbeat.
+		b, _ := json.Marshal(map[string]any{"healthy": healthy, "checks": checks, "observedAt": stamp(), "pid": os.Getpid(), "workerLimit": workers, "transferWorkerLimit": transfers})
 		temp := filepath.Join(a.DataDir, "engine-health.next")
 		if os.WriteFile(temp, b, 0600) == nil {
 			_ = os.Rename(temp, filepath.Join(a.DataDir, "engine-health.json"))

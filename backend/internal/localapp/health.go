@@ -2,6 +2,7 @@ package localapp
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"strings"
 	"time"
@@ -16,11 +17,15 @@ func (a *App) beat(name string) {
 	a.healthMu.Unlock()
 }
 func (a *App) liveStatus(ctx context.Context) (map[string]any, bool) {
+	return a.liveStatusWithDB(ctx, a.DB)
+}
+
+func (a *App) liveStatusWithDB(ctx context.Context, db *sql.DB) (map[string]any, bool) {
 	checks := map[string]any{}
 	healthy := true
 	probe, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	if e := a.DB.PingContext(probe); e != nil {
+	if e := db.PingContext(probe); e != nil {
 		checks["database"] = "unresponsive"
 		healthy = false
 	} else {
