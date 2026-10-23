@@ -150,6 +150,7 @@ func TestSDKChildRejectsOversizedRenamedArchive(t *testing.T) {
 
 func TestExplicitManualDeliveryCanMoveArchiveAboveCapWithoutScanning(t *testing.T) {
 	a, s, stores := reliabilityFixture(t)
+	s.Key = "manual.zip"
 	s.Profile.MaxCompressedScanBytes = 1
 	s.Profile.CompressedOversizeAction = "hold"
 	body := []byte("PK\x03\x04manual archive delivery")
