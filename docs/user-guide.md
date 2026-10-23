@@ -453,3 +453,11 @@ A longer wait reduces early pickup after a temporary upload pause but does not e
 ![Upload wait and retry settings](images/upload-checks-retries.png)
 
 New scans report the original source filename/key in Vision One, including its folder prefix, instead of the scanner’s private `/data/captures/scan-*` path. The SDK reads the captured bytes through its reader interface. Historical Vision One entries retain their original reported filename.
+
+## Remove a saved profile or storage connection
+
+Use the trash button on the saved item, then choose **Remove configuration**. This removes the saved configuration only; historical jobs and their encrypted snapshots remain, and storage files are not deleted.
+
+A storage connection cannot be removed while a saved profile references it as a source, clean, malicious, scan-failed, oversized-file destination or move-rule destination. Change or remove those profile references first.
+
+A failed removal keeps the dialog open with its server error. If the server returns an unexpected non-JSON response, the dialog shows the HTTP status instead of a JSON parsing error. Canceling and reopening clears the previous removal error.

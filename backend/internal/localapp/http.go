@@ -265,9 +265,23 @@ func (a *App) mountDelete(w http.ResponseWriter, r *http.Request) {
 		var p Profile
 		_ = json.Unmarshal(b, &p)
 		id := r.PathValue("id")
-		if p.SourceMount == id || p.GoodMount == id || p.BadMount == id {
-			problem(w, 409, "Remove this connection from scan profiles first.")
-			return
+		references := []string{p.SourceMount, p.GoodMount, p.BadMount, p.FailedMount}
+		if p.OversizeAction == "custom" {
+			references = append(references, p.OversizeMount)
+		}
+		if p.CompressedOversizeAction == "custom" {
+			references = append(references, p.CompressedOversizeMount)
+		}
+		for _, rule := range p.Rules {
+			if rule.Action == "route" {
+				references = append(references, rule.DestinationMount)
+			}
+		}
+		for _, reference := range references {
+			if reference == id {
+				problem(w, 409, "Remove this connection from scan profiles first.")
+				return
+			}
 		}
 	}
 	a.remove(w, r, "mounts")
