@@ -251,7 +251,7 @@ Files above their limit are never submitted to the SDK. A move to clean is an ex
 
 Classification uses common archive extensions and captured signatures, including ZIP, GZIP, TAR, RAR, 7z, BZIP2, XZ, Zstandard and CAB. ZIP-based documents such as DOCX and XLSX also use the compressed-file limit. Renamed archives recognized by their signatures are checked again after capture, and the SDK child has its own size guard. Explicit hold/ignore/move rules retain their existing precedence. A successful SDK verdict for an eligible archive does not prove every member was inspected.
 
-Start with **Simultaneous large files = 1**. **Maximum job duration** includes capture, scan and delivery (default six hours per attempt). Size policies apply to automatic discovery, manual source scans and queued snapshots; legacy profiles use the new 2 GB compressed-file default.
+Start with **Simultaneous large files = 1**. **Maximum job duration** includes capture, scan and delivery (default six hours per attempt). Size policies apply to automatic discovery, manual source scans and queued snapshots; legacy profiles use the new 2 GB compressed-file default. An administrator’s explicit manual delivery without scanning can still move a held archive; this does not create a clean verdict. A manual scan retry still obeys the cap.
 
 ![Separate regular and compressed-file policies](images/profile-large-files.png)
 

@@ -370,9 +370,13 @@ func (a *App) process(parent context.Context, id string, s Snapshot, attempt int
 		a.Audit("job.acknowledged", id, "Legacy destination recovery cancelled before storage access; delivered files remain externally managed.")
 		return
 	}
-	if action, rule := s.Profile.FilePolicy(strings.TrimPrefix(s.Key, s.Source.Prefix+s.Profile.Prefix), s.Size); action == "hold" || action == "ignore" {
-		_ = a.transition(id, "HELD", "NOT_SCANNED", "", "", "Policy "+action+": "+rule, 0)
-		return
+	// An explicitly authorized manual delivery never calls the SDK. Its capture
+	// and identity checks still run; a manual retry retains the size-policy gate.
+	if s.ManualAction == "" {
+		if action, rule := s.Profile.FilePolicy(strings.TrimPrefix(s.Key, s.Source.Prefix+s.Profile.Prefix), s.Size); action == "hold" || action == "ignore" {
+			_ = a.transition(id, "HELD", "NOT_SCANNED", "", "", "Policy "+action+": "+rule, 0)
+			return
+		}
 	}
 	if e := a.handoffSource(ctx, id, &s); e != nil {
 		a.retryStage(id, "download", s.Profile, "UNKNOWN", "", "", "Share handoff unavailable or source changed; original/claimed file retained.")

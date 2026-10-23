@@ -147,3 +147,31 @@ func TestSDKChildRejectsOversizedRenamedArchive(t *testing.T) {
 		t.Fatal("SDK child did not enforce hard archive cap", err)
 	}
 }
+
+func TestExplicitManualDeliveryCanMoveArchiveAboveCapWithoutScanning(t *testing.T) {
+	a, s, stores := reliabilityFixture(t)
+	s.Profile.MaxCompressedScanBytes = 1
+	s.Profile.CompressedOversizeAction = "hold"
+	body := []byte("PK\x03\x04manual archive delivery")
+	if err := os.WriteFile(stores["source"].p(s.Key), body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	info, _ := stores["source"].Stat(s.Key)
+	s.ETag = infoTag(info)
+	s.Size = int64(len(body))
+	s.ManualAction = "clean"
+	s.Failed = s.Good
+	a.scanFn = func(context.Context, string, Scanner, Profile) ([]byte, error) {
+		t.Fatal("manual archive delivery reached SDK")
+		return nil, nil
+	}
+	id, err := a.insertJob(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.process(context.Background(), id, s, 1)
+	m, err := a.loadMove(id)
+	if err != nil || m.Phase != "COMPLETED" || m.Target.ID != s.Good.ID || m.FinalState != "ACKNOWLEDGED" || m.Verdict != "UNKNOWN" {
+		t.Fatal(m, err)
+	}
+}
